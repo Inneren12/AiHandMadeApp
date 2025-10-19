@@ -94,7 +94,7 @@ object RunFull {
         val wsum = FloatArray(src.width * src.height)
         var tiles = 0
 
-        tiler.forEachTile { tx, ty, tw, th, _, _ ->
+        tiler.forEachTile { tx, ty, tw, th, ox, oy ->
             Logger.i(
                 "RUN",
                 "tile",
@@ -107,16 +107,19 @@ object RunFull {
                     "overlap" to overlap
                 )
             )
-            val tileRGB = ImageOps.extractFloatRGB(src, tx, ty, tw, th)
-            val wb = ImageOps.whiteBalanceNeutral(tileRGB, tw, th)
-            val nry = ImageOps.nrLumaGuided(wb, tw, th, strength = 0.25f)
-            val nrc = ImageOps.nrChromaBox(nry, tw, th, strength = 0.20f)
-            val anti = ImageOps.antiSandMedian3(nrc, tw, th)
-            val unify = ImageOps.unifySoft(anti, tw, th)
-            val halo = ImageOps.haloSuppress(unify, tw, th, k = 0.15f)
-            val aa = ImageOps.anisoAA(unify = halo, w = tw, h = th, sigma = build.sigma)
-            val resamp = ImageOps.ewaResample(aa, tw, th, filter = build.filter, phase = build.phase)
-            Feather.blend(outF, wsum, resamp, tx, ty, tw, th, src.width, src.height, overlap)
+            val ext = ImageOps.extractFloatRGBClamped(src, tx - ox, ty - oy, tw + 2 * ox, th + 2 * oy)
+            val extW = tw + 2 * ox
+            val extH = th + 2 * oy
+            val wb = ImageOps.whiteBalanceNeutral(ext, extW, extH)
+            val nry = ImageOps.nrLumaGuided(wb, extW, extH, strength = 0.25f)
+            val nrc = ImageOps.nrChromaBox(nry, extW, extH, strength = 0.20f)
+            val anti = ImageOps.antiSandMedian3(nrc, extW, extH)
+            val unify = ImageOps.unifySoft(anti, extW, extH)
+            val halo = ImageOps.haloSuppress(unify, extW, extH, k = 0.15f)
+            val aa = ImageOps.anisoAA(halo, extW, extH, sigma = build.sigma)
+            val rsExt = ImageOps.ewaResample(aa, extW, extH, filter = build.filter, phase = build.phase)
+            val rs = ImageOps.crop(rsExt, extW, extH, ox, oy, tw, th)
+            Feather.blend(outF, wsum, rs, tx, ty, tw, th, src.width, src.height, overlap)
             Logger.i(
                 "RUN",
                 "tile",

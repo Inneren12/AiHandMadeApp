@@ -1,20 +1,21 @@
 package com.appforcross.editor.data
 
-import org.junit.After
-import org.junit.Assert.assertArrayEquals
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertTrue
-import org.junit.Before
-import org.junit.Test
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 
 class BlueNoise64Test {
-    @Before
+    @BeforeTest
     fun setUp() {
         BlueNoise64.logInterceptor = null
     }
 
-    @After
+    @AfterTest
     fun tearDown() {
         BlueNoise64.logInterceptor = null
     }
@@ -24,7 +25,7 @@ class BlueNoise64Test {
         val spec = BN64Spec()
         val first = BlueNoise64.generate(spec)
         val second = BlueNoise64.generate(spec)
-        assertArrayEquals(first, second)
+        assertContentEquals(first, second)
         val hash1 = BlueNoise64.sha256(first)
         val hash2 = BlueNoise64.sha256(second)
         assertEquals(hash1, hash2)
@@ -47,7 +48,7 @@ class BlueNoise64Test {
         assertEquals(spec.size * spec.size, bytes.size)
         for (value in bytes) {
             val unsigned = value.toInt() and 0xFF
-            assertTrue(unsigned in 0..255)
+            assertTrue(unsigned in 0..255, "Value $unsigned is out of range")
         }
     }
 
@@ -74,7 +75,7 @@ class BlueNoise64Test {
             }
         }
         val average = if (count == 0) 0.0 else totalDiff / count / 255.0
-        assertTrue("Average neighbor delta too low: $average", average > 15.0 / 255.0)
+        assertTrue(average > 15.0 / 255.0, "Average neighbor delta too low: $average")
     }
 
     @Test
@@ -87,14 +88,12 @@ class BlueNoise64Test {
         assertEquals(BN64Spec().size * BN64Spec().size, bytes.size)
         val paramsEvent = events.firstOrNull { it.second == "params" }
         val doneEvent = events.firstOrNull { it.second == "done" }
-        assertTrue("params event missing", paramsEvent != null)
-        assertTrue("done event missing", doneEvent != null)
-        val paramsPayload = paramsEvent!!.third
-        val donePayload = doneEvent!!.third
+        val paramsPayload = assertNotNull(paramsEvent, "params event missing").third
+        val donePayload = assertNotNull(doneEvent, "done event missing").third
         val expectedParamKeys = setOf("bn.size", "bn.passes", "bn.sigma1", "bn.sigma2", "bn.seed", "bn.method")
-        assertTrue(paramsPayload.keys.containsAll(expectedParamKeys))
+        assertTrue(paramsPayload.keys.containsAll(expectedParamKeys), "Missing params keys")
         val expectedDoneKeys = setOf("ms", "bytes", "hash")
-        assertTrue(donePayload.keys.containsAll(expectedDoneKeys))
+        assertTrue(donePayload.keys.containsAll(expectedDoneKeys), "Missing done keys")
         assertEquals(bytes.size, donePayload["bytes"])
         val hash = BlueNoise64.sha256(bytes)
         assertEquals(hash, donePayload["hash"])

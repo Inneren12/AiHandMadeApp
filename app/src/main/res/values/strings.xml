@@ -7,6 +7,7 @@
     <string name="detected_placeholder">Detected: —</string>
     <string name="preset_placeholder">Preset: —</string>
     <string name="info_template">Source: %1$d×%2$d</string>
+    <!-- %1$s = kind name, %.2f = confidence -->
     <string name="detected_template">Detected: %1$s  (confidence %.2f)</string>
     <string name="override_photo">Override PHOTO</string>
     <string name="override_discrete">Override DISCRETE</string>
@@ -17,7 +18,9 @@
     <string name="quant_off">K=off</string>
     <string name="quant_template">K=%1$d</string>
     <string name="process_as_photo">Process as PHOTO</string>
+    <!-- %1$s = preset id, %2$.2f = confidence -->
     <string name="preset_label">Preset: %1$s  (conf %2$.2f)</string>
     <string name="prescale_placeholder">PreScale: —</string>
+    <!-- %1$d=Wst, %2$.2f=sigma, %3$d=phase.dx, %4$d=phase.dy, %5$s=filter, %6$.3f=SSIM, %7$.3f=Edge, %8$.3f=Band -->
     <string name="prescale_label">PreScale: Wst=%1$d σ=%2$.2f phase=%3$d,%4$d filter=%5$s SSIM=%6$.3f Edge=%7$.3f Band=%8$.3f</string>
 </resources>

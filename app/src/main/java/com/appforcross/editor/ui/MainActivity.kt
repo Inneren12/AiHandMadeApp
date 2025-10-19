@@ -193,7 +193,11 @@ class MainActivity : Activity(), PreviewController.Listener {
     }
 
     private fun renderDetected(kind: SceneKind, confidence: Float, via: String) {
-        detectedText.text = getString(R.string.detected_template, kind.name, confidence)
+        detectedText.text = try {
+            getString(R.string.detected_template, kind.name, confidence.toDouble())
+        } catch (_: Throwable) {
+            "Detected: ${kind.name}  (confidence ${String.format(Locale.US, "%.2f", confidence)})"
+        }
         btnProcessAsPhoto.visibility = if (kind == SceneKind.DISCRETE) View.VISIBLE else View.GONE
         Logger.i(
             "UI",
@@ -201,7 +205,7 @@ class MainActivity : Activity(), PreviewController.Listener {
             mapOf(
                 "via" to via,
                 "kind" to kind.name,
-                "confidence" to confidence
+                "confidence" to String.format(Locale.US, "%.3f", confidence)
             )
         )
         renderPreset(kind)
@@ -225,7 +229,15 @@ class MainActivity : Activity(), PreviewController.Listener {
             return
         }
         val presetDecision = ScenePresetHook.decideForFoto(decision.features)
-        presetText.text = getString(R.string.preset_label, presetDecision.preset.id, presetDecision.confidence)
+        presetText.text = try {
+            getString(
+                R.string.preset_label,
+                presetDecision.preset.id,
+                presetDecision.confidence.toDouble()
+            )
+        } catch (_: Throwable) {
+            "Preset: ${presetDecision.preset.id}  (conf ${String.format(Locale.US, "%.2f", presetDecision.confidence)})"
+        }
         Logger.i(
             "UI",
             "preset",
@@ -247,18 +259,32 @@ class MainActivity : Activity(), PreviewController.Listener {
         }
         val buildDecision = BuildSpec.decide(w, h, luminance)
         val verify = RunFull.run(ImageOps.packToF16(rgb, w, h), buildDecision).verify
-        preScaleText.text = String.format(
-            Locale.US,
-            getString(R.string.prescale_label),
-            buildDecision.wst,
-            buildDecision.sigma,
-            buildDecision.phase.dx,
-            buildDecision.phase.dy,
-            buildDecision.filter,
-            verify.ssimProxy,
-            verify.edgeKeep,
-            verify.bandIdx
-        )
+        preScaleText.text = try {
+            getString(
+                R.string.prescale_label,
+                buildDecision.wst,
+                buildDecision.sigma.toDouble(),
+                buildDecision.phase.dx,
+                buildDecision.phase.dy,
+                buildDecision.filter,
+                verify.ssimProxy.toDouble(),
+                verify.edgeKeep.toDouble(),
+                verify.bandIdx.toDouble()
+            )
+        } catch (_: Throwable) {
+            String.format(
+                Locale.US,
+                "PreScale: Wst=%d σ=%.2f phase=%d,%d filter=%s SSIM=%.3f Edge=%.3f Band=%.3f",
+                buildDecision.wst,
+                buildDecision.sigma,
+                buildDecision.phase.dx,
+                buildDecision.phase.dy,
+                buildDecision.filter,
+                verify.ssimProxy,
+                verify.edgeKeep,
+                verify.bandIdx
+            )
+        }
     }
 
     companion object {

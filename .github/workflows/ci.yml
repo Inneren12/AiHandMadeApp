@@ -26,15 +26,15 @@ jobs:
           cache: gradle
 
       # Wrapper-а нет — ставим Gradle дистрибутив прямо в раннер
-      - name: Setup Gradle 8.9 (no wrapper)
+      - name: Setup Gradle 8.13 (no wrapper)
         uses: gradle/actions/setup-gradle@v5
         with:
-          gradle-version: "8.9" # >=8.7 для AGP 8.5.x
+          gradle-version: "8.13" # требуется текущей версией AGP
 
       - name: Setup Android SDK + packages
         uses: android-actions/setup-android@v3
         with:
-          packages: "platform-tools platforms;android-34 build-tools;34.0.0"
+          packages: "platform-tools platforms;android-34 platforms;android-35 build-tools;34.0.0 build-tools;35.0.0"
 
       - name: Show versions
         run: |

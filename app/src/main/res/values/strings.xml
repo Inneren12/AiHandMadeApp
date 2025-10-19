@@ -1,11 +1,19 @@
 <resources>
     <string name="app_name">AiHandMadeApp</string>
     <string name="import_image_title">Select Image</string>
+    <string name="import_image_button">Import image</string>
+    <string name="preview_content_description">Preview</string>
     <string name="info_placeholder">Source: —</string>
     <string name="detected_placeholder">Detected: —</string>
     <string name="info_template">Source: %1$d×%2$d</string>
     <string name="detected_template">Detected: %1$s  (confidence %.2f)</string>
+    <string name="override_photo">Override PHOTO</string>
+    <string name="override_discrete">Override DISCRETE</string>
+    <string name="scale_label">Scale (%)</string>
+    <string name="scale_default">100%</string>
     <string name="scale_template">%1$d%%</string>
+    <string name="quant_label">Quantization K (0=off)</string>
     <string name="quant_off">K=off</string>
     <string name="quant_template">K=%1$d</string>
+    <string name="process_as_photo">Process as PHOTO</string>
 </resources>

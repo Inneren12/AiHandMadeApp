@@ -104,7 +104,8 @@ class MainActivity : Activity(), PreviewController.Listener {
     }
 
     override fun onDestroy() {
-        controller.shutdown()
+        previewImage.setImageDrawable(null)
+        controller.dispose()
         currentBitmap?.takeIf { !it.isRecycled }?.recycle()
         currentBitmap = null
         super.onDestroy()

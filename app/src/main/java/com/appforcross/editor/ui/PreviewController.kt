@@ -54,12 +54,21 @@ class PreviewController {
         requestRender()
     }
 
-    fun shutdown() {
+    /** Release controller resources. Call from the host Activity's onDestroy(). */
+    fun dispose() {
         listener = null
-        exec.shutdownNow()
         ui.removeCallbacksAndMessages(null)
-        source?.takeIf { !it.isRecycled }?.recycle()
+        try {
+            exec.shutdownNow()
+        } catch (_: Throwable) {
+        }
+        source?.let { bitmap ->
+            if (!bitmap.isRecycled) {
+                bitmap.recycle()
+            }
+        }
         source = null
+        Logger.i("PREVIEW", "disposed", emptyMap())
     }
 
     private fun requestRender() {

@@ -13,13 +13,13 @@
             android:id="@+id/btnImport"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Import image" />
+            android:text="@string/import_image_button" />
 
         <TextView
             android:id="@+id/tvInfo"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Source: —"
+            android:text="@string/info_placeholder"
             android:paddingTop="6dp"
             android:paddingBottom="6dp" />
 
@@ -29,13 +29,13 @@
             android:layout_height="220dp"
             android:scaleType="fitCenter"
             android:adjustViewBounds="true"
-            android:contentDescription="Preview" />
+            android:contentDescription="@string/preview_content_description" />
 
         <TextView
             android:id="@+id/detectedText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Detected: —"
+            android:text="@string/detected_placeholder"
             android:textSize="18sp"
             android:paddingTop="8dp"
             android:paddingBottom="8dp" />
@@ -50,20 +50,20 @@
                 android:id="@+id/rbPhoto"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Override PHOTO" />
+                android:text="@string/override_photo" />
 
             <RadioButton
                 android:id="@+id/rbDiscrete"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="16dp"
-                android:text="Override DISCRETE" />
+                android:text="@string/override_discrete" />
         </RadioGroup>
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Scale (%)" />
+            android:text="@string/scale_label" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -80,14 +80,14 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:paddingStart="8dp"
-                android:text="100%" />
+                android:text="@string/scale_default" />
         </LinearLayout>
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:paddingTop="6dp"
-            android:text="Quantization K (0=off)" />
+            android:text="@string/quant_label" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -104,7 +104,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:paddingStart="8dp"
-                android:text="K=off" />
+                android:text="@string/quant_off" />
         </LinearLayout>
 
         <Button
@@ -112,7 +112,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:text="Process as PHOTO"
+            android:text="@string/process_as_photo"
             android:visibility="gone" />
     </LinearLayout>
 </ScrollView>

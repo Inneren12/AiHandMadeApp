@@ -23,6 +23,34 @@ object ImageOps {
         return out
     }
 
+    fun extractFloatRGBClamped(src: LinearImageF16, x0: Int, y0: Int, w: Int, h: Int): FloatArray {
+        val out = FloatArray(w * h * 3)
+        var p = 0
+        for (yy in 0 until h) {
+            val sy = (y0 + yy).coerceIn(0, src.height - 1)
+            for (xx in 0 until w) {
+                val sx = (x0 + xx).coerceIn(0, src.width - 1)
+                val gi = (sy * src.width + sx) * 3
+                out[p++] = HalfFloats.toFloat(src.data[gi])
+                out[p++] = HalfFloats.toFloat(src.data[gi + 1])
+                out[p++] = HalfFloats.toFloat(src.data[gi + 2])
+            }
+        }
+        return out
+    }
+
+    fun crop(rgb: FloatArray, W: Int, H: Int, x: Int, y: Int, w: Int, h: Int): FloatArray {
+        val out = FloatArray(w * h * 3)
+        var dst = 0
+        for (yy in 0 until h) {
+            val srcRow = ((y + yy) * W + x) * 3
+            val len = w * 3
+            rgb.copyInto(out, destinationOffset = dst, startIndex = srcRow, endIndex = srcRow + len)
+            dst += len
+        }
+        return out
+    }
+
     fun packToF16(rgb: FloatArray, W: Int, H: Int): LinearImageF16 {
         val out = ShortArray(W * H * 3)
         var i = 0

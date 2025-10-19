@@ -4,53 +4,49 @@ import com.appforcross.editor.logging.Logger
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.exp
-import kotlin.math.floor
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 
-/**
- * Анализатор сцены по превью RGB (линейный, row-major).
- */
+private const val TAG = "SCENE"
+
+/** Parameters controlling scene analysis. */
+data class SceneParams(
+    val maxPreview: Int = 1024,
+    val sobelThresh: Float = 0.12f,
+    val paletteLevels: Int = 32,
+    val topK: Int = 8,
+    val checkerWindow: Int = 2
+)
+
+/** Features computed from a preview buffer. */
+data class SceneFeatures(
+    val width: Int,
+    val height: Int,
+    val colors5bit: Int,
+    val top8Coverage: Float,
+    val edgeDensity: Float,
+    val checker2x2: Float,
+    val entropy: Float
+)
+
+/** Final decision produced by the analyzer. */
+data class SceneDecision(
+    val kind: SceneKind,
+    val confidence: Float,
+    val features: SceneFeatures
+)
+
 object SceneAnalyzer {
-    private const val TAG = "SCENE"
 
-    data class SceneParams(
-        val maxPreview: Int = 1024,
-        val sobelThresh: Float = 0.12f,
-        val paletteLevels: Int = 32,
-        val topK: Int = 8,
-        val checkerWindow: Int = 2
-    )
-
-    data class SceneFeatures(
-        val width: Int,
-        val height: Int,
-        val colors5bit: Int,
-        val top8Coverage: Float,
-        val edgeDensity: Float,
-        val checker2x2: Float,
-        val entropy: Float
-    )
-
-    data class SceneDecision(
-        val kind: SceneKind,
-        val confidence: Float,
-        val features: SceneFeatures
-    )
-
-    /**
-     * Анализирует превью RGB (линейный, row-major), 3 компоненты на пиксель.
-     * @param rgbLinear Значения в диапазоне 0..1, длина массива = width * height * 3.
-     */
     fun analyzePreview(
         rgbLinear: FloatArray,
         width: Int,
         height: Int,
         params: SceneParams = SceneParams()
     ): SceneDecision {
-        require(rgbLinear.size == width * height * 3) { "rgbLinear size mismatch" }
+        require(rgbLinear.size == width * height * 3) { "rgbLinear length mismatch" }
         val startNs = System.nanoTime()
         Logger.i(
             TAG,
@@ -65,25 +61,27 @@ object SceneAnalyzer {
                 "checkerWindow" to params.checkerWindow
             )
         )
-        val features = computeFeaturesInternal(rgbLinear, width, height, params)
-        Logger.i(
-            TAG,
-            "features",
-            mapOf(
-                "colors5bit" to features.colors5bit,
-                "top8Coverage" to features.top8Coverage,
-                "edgeDensity" to features.edgeDensity,
-                "checker2x2" to features.checker2x2,
-                "entropy" to features.entropy
-            )
-        )
-        val decision = decide(features)
+        val features = computeFeaturesInternal(rgbLinear, width, height, params, logTelemetry = false)
+        logFeatures(features)
+
+        val isPaletteDiscrete = features.top8Coverage >= 0.70f && features.colors5bit <= 64
+        val isCheckerDiscrete = features.checker2x2 >= 0.30f && features.edgeDensity >= 0.08f
+        val kind = if (isPaletteDiscrete || isCheckerDiscrete) SceneKind.DISCRETE else SceneKind.PHOTO
+
+        val scoreDiscrete =
+            max(0f, features.top8Coverage - 0.70f) * 3.0f +
+                max(0f, features.checker2x2 - 0.30f) * 2.0f +
+                max(0f, features.edgeDensity - 0.08f) * 1.5f -
+                max(0f, (features.colors5bit - 64).toFloat()) * 0.0f
+        val confDiscrete = sigma(5.0f * scoreDiscrete)
+        val confidence = if (kind == SceneKind.DISCRETE) confDiscrete else 1f - confDiscrete
+
         Logger.i(
             TAG,
             "decision",
             mapOf(
-                "kind" to decision.kind.name,
-                "confidence" to decision.confidence
+                "kind" to kind.name,
+                "confidence" to confidence
             )
         )
         val durationMs = (System.nanoTime() - startNs) / 1_000_000.0
@@ -97,150 +95,120 @@ object SceneAnalyzer {
                 "memMB" to usedMb
             )
         )
-        return decision
+        return SceneDecision(kind, confidence, features)
     }
 
-    /**
-     * Вычисляет признаки сцены.
-     */
     fun computeFeatures(
         rgbLinear: FloatArray,
         width: Int,
         height: Int,
         params: SceneParams = SceneParams()
     ): SceneFeatures {
-        require(rgbLinear.size == width * height * 3) { "rgbLinear size mismatch" }
-        val startNs = System.nanoTime()
-        Logger.i(
-            TAG,
-            "params",
-            mapOf(
-                "width" to width,
-                "height" to height,
-                "maxPreview" to params.maxPreview,
-                "sobelThresh" to params.sobelThresh,
-                "paletteLevels" to params.paletteLevels,
-                "topK" to params.topK,
-                "checkerWindow" to params.checkerWindow
-            )
-        )
-        val features = computeFeaturesInternal(rgbLinear, width, height, params)
-        Logger.i(
-            TAG,
-            "features",
-            mapOf(
-                "colors5bit" to features.colors5bit,
-                "top8Coverage" to features.top8Coverage,
-                "edgeDensity" to features.edgeDensity,
-                "checker2x2" to features.checker2x2,
-                "entropy" to features.entropy
-            )
-        )
-        val durationMs = (System.nanoTime() - startNs) / 1_000_000.0
-        val runtime = Runtime.getRuntime()
-        val usedMb = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024)
-        Logger.i(
-            TAG,
-            "done",
-            mapOf(
-                "ms" to String.format(Locale.US, "%.3f", durationMs),
-                "memMB" to usedMb
-            )
-        )
-        return features
+        return computeFeaturesInternal(rgbLinear, width, height, params, logTelemetry = true)
     }
 
     private fun computeFeaturesInternal(
         rgbLinear: FloatArray,
         width: Int,
         height: Int,
-        params: SceneParams
+        params: SceneParams,
+        logTelemetry: Boolean
     ): SceneFeatures {
-        val levels = max(2, params.paletteLevels)
-        val levelFactor = levels.toFloat()
-        val totalPixels = width * height
-        val colorCounts = IntArray(levels * levels * levels)
-        val luma = FloatArray(totalPixels)
+        require(rgbLinear.size == width * height * 3) { "rgbLinear length mismatch" }
+        val startNs = if (logTelemetry) System.nanoTime() else 0L
+        if (logTelemetry) {
+            Logger.i(
+                TAG,
+                "params",
+                mapOf(
+                    "width" to width,
+                    "height" to height,
+                    "maxPreview" to params.maxPreview,
+                    "sobelThresh" to params.sobelThresh,
+                    "paletteLevels" to params.paletteLevels,
+                    "topK" to params.topK,
+                    "checkerWindow" to params.checkerWindow
+                )
+            )
+        }
 
+        val totalPixels = width * height
+        val levels = max(2, params.paletteLevels)
+        val hist = IntArray(levels * levels * levels)
+        val luma = FloatArray(totalPixels)
+        var px = 0
         var idx = 0
-        var lIndex = 0
-        while (idx < rgbLinear.size) {
+        while (px < totalPixels) {
             val r = clamp01(rgbLinear[idx])
             val g = clamp01(rgbLinear[idx + 1])
             val b = clamp01(rgbLinear[idx + 2])
-            val lr = floor(r * levelFactor).toInt().coerceIn(0, levels - 1)
-            val lg = floor(g * levelFactor).toInt().coerceIn(0, levels - 1)
-            val lb = floor(b * levelFactor).toInt().coerceIn(0, levels - 1)
-            val key = (lr shl 10) or (lg shl 5) or lb
-            colorCounts[key] = colorCounts[key] + 1
-            val y = 0.2126f * r + 0.7152f * g + 0.0722f * b
-            luma[lIndex] = y
+            val r5 = (r * (levels - 1)).toInt().coerceIn(0, levels - 1)
+            val g5 = (g * (levels - 1)).toInt().coerceIn(0, levels - 1)
+            val b5 = (b * (levels - 1)).toInt().coerceIn(0, levels - 1)
+            val histIndex = (r5 * levels + g5) * levels + b5
+            hist[histIndex]++
+            luma[px] = 0.2126f * r + 0.7152f * g + 0.0722f * b
             idx += 3
-            lIndex += 1
+            px += 1
         }
 
-        var uniqueColors = 0
-        for (count in colorCounts) {
-            if (count > 0) uniqueColors += 1
+        var distinct = 0
+        for (count in hist) {
+            if (count > 0) distinct++
         }
 
-        val topK = min(params.topK, colorCounts.size)
-        val topCounts = IntArray(topK) { 0 }
-        for (count in colorCounts) {
-            if (count == 0) continue
-            var pos = topK - 1
-            if (count <= topCounts[pos]) continue
-            while (pos > 0 && count > topCounts[pos - 1]) {
-                topCounts[pos] = topCounts[pos - 1]
-                pos -= 1
-            }
-            topCounts[pos] = count
-        }
+        val top = hist.clone().sortedArrayDescending()
+        val limit = min(params.topK, top.size)
         var covered = 0
-        for (i in 0 until topK) {
-            covered += topCounts[i]
+        for (i in 0 until limit) {
+            covered += top[i]
         }
-        val coverage = if (totalPixels == 0) 0f else covered.toFloat() / totalPixels
+        val topCoverage = if (totalPixels == 0) 0f else covered.toFloat() / totalPixels.toFloat()
 
         val edgeDensity = computeEdgeDensity(luma, width, height, params.sobelThresh)
-        val checker = computeCheckerRatio(luma, width, height, params.checkerWindow)
+        val checker2x2 = computeCheckerFraction(luma, width, height, params.checkerWindow)
         val entropy = computeEntropy(luma)
 
-        return SceneFeatures(
+        val features = SceneFeatures(
             width = width,
             height = height,
-            colors5bit = uniqueColors,
-            top8Coverage = coverage,
+            colors5bit = distinct,
+            top8Coverage = topCoverage,
             edgeDensity = edgeDensity,
-            checker2x2 = checker,
+            checker2x2 = checker2x2,
             entropy = entropy
         )
-    }
 
-    private fun decide(features: SceneFeatures): SceneDecision {
-        val isDiscrete = when {
-            features.top8Coverage >= 0.70f && features.colors5bit <= 64 -> true
-            features.checker2x2 >= 0.30f && features.edgeDensity >= 0.08f -> true
-            else -> false
+        if (logTelemetry) {
+            logFeatures(features)
+            val durationMs = (System.nanoTime() - startNs) / 1_000_000.0
+            val runtime = Runtime.getRuntime()
+            val usedMb = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024)
+            Logger.i(
+                TAG,
+                "done",
+                mapOf(
+                    "ms" to String.format(Locale.US, "%.3f", durationMs),
+                    "memMB" to usedMb
+                )
+            )
         }
-        val score = 8f * (features.top8Coverage - 0.70f) +
-            6f * (features.checker2x2 - 0.30f) +
-            (-4f) * (0.08f - features.edgeDensity)
-        val probability = sigmoid(score)
-        val confidence = if (isDiscrete) probability else 1f - probability
-        val kind = if (isDiscrete) SceneKind.DISCRETE else SceneKind.PHOTO
-        return SceneDecision(kind = kind, confidence = confidence.coerceIn(0f, 1f), features = features)
+
+        return features
     }
 
-    private fun sigmoid(x: Float): Float {
-        val clamped = x.coerceIn(-20f, 20f)
-        return (1f / (1f + exp(-clamped)))
-    }
-
-    private fun clamp01(v: Float): Float = when {
-        v < 0f -> 0f
-        v > 1f -> 1f
-        else -> v
+    private fun logFeatures(features: SceneFeatures) {
+        Logger.i(
+            TAG,
+            "features",
+            mapOf(
+                "colors5bit" to features.colors5bit,
+                "top8Coverage" to String.format(Locale.US, "%.4f", features.top8Coverage),
+                "edgeDensity" to String.format(Locale.US, "%.4f", features.edgeDensity),
+                "checker2x2" to String.format(Locale.US, "%.4f", features.checker2x2),
+                "entropy" to String.format(Locale.US, "%.3f", features.entropy)
+            )
+        )
     }
 
     private fun computeEdgeDensity(
@@ -252,74 +220,90 @@ object SceneAnalyzer {
         if (width < 3 || height < 3) return 0f
         var edges = 0
         var samples = 0
-        val norm = 4f
-        for (y in 1 until height - 1) {
-            val row = y * width
-            for (x in 1 until width - 1) {
-                val idx = row + x
-                val gx = (-1f * luma[idx - width - 1]) + (1f * luma[idx - width + 1]) +
-                    (-2f * luma[idx - 1]) + (2f * luma[idx + 1]) +
-                    (-1f * luma[idx + width - 1]) + (1f * luma[idx + width + 1])
-                val gy = (-1f * luma[idx - width - 1]) + (-2f * luma[idx - width]) + (-1f * luma[idx - width + 1]) +
-                    (1f * luma[idx + width - 1]) + (2f * luma[idx + width]) + (1f * luma[idx + width + 1])
-                val magnitude = sqrt(gx * gx + gy * gy) / norm
+        val w = width
+        val h = height
+        var y = 1
+        while (y < h - 1) {
+            var x = 1
+            while (x < w - 1) {
+                val gx =
+                    -1f * luma[(y - 1) * w + (x - 1)] + 1f * luma[(y - 1) * w + (x + 1)] +
+                        -2f * luma[y * w + (x - 1)] + 2f * luma[y * w + (x + 1)] +
+                        -1f * luma[(y + 1) * w + (x - 1)] + 1f * luma[(y + 1) * w + (x + 1)]
+                val gy =
+                    -1f * luma[(y - 1) * w + (x - 1)] - 2f * luma[(y - 1) * w + x] - 1f * luma[(y - 1) * w + (x + 1)] +
+                        1f * luma[(y + 1) * w + (x - 1)] + 2f * luma[(y + 1) * w + x] + 1f * luma[(y + 1) * w + (x + 1)]
+                val magnitude = sqrt(gx * gx + gy * gy) / 4f
                 if (magnitude > sobelThresh) {
-                    edges += 1
+                    edges++
                 }
-                samples += 1
+                samples++
+                x++
             }
+            y++
         }
-        return if (samples == 0) 0f else edges.toFloat() / samples
+        return if (samples == 0) 0f else edges.toFloat() / samples.toFloat()
     }
 
-    private fun computeCheckerRatio(
+    private fun computeCheckerFraction(
         luma: FloatArray,
         width: Int,
         height: Int,
-        window: Int
+        windowSize: Int
     ): Float {
-        if (width < window || height < window || window < 2) return 0f
+        val window = max(2, windowSize)
+        if (width < window || height < window) return 0f
         var checkerWindows = 0
         var totalWindows = 0
-        val maxX = width - window + 1
-        val maxY = height - window + 1
-        for (y in 0 until maxY) {
-            for (x in 0 until maxX) {
+        val maxX = width - window
+        val maxY = height - window
+        var y = 0
+        while (y <= maxY) {
+            var x = 0
+            while (x <= maxX) {
                 val a = luma[y * width + x]
-                val b = luma[y * width + x + 1]
-                val c = luma[(y + 1) * width + x]
-                val d = luma[(y + 1) * width + x + 1]
-                val avgDiag1 = (a + d) * 0.5f
-                val avgDiag2 = (b + c) * 0.5f
-                val diffDiag = abs(avgDiag1 - avgDiag2)
-                val diffOpposite = max(abs(a - d), abs(b - c))
-                val diffAdjacent = max(
-                    abs(a - b),
-                    max(abs(b - d), max(abs(c - d), abs(a - c)))
-                )
-                if (diffDiag > 0.1f && diffOpposite < 0.08f && diffAdjacent > 0.12f) {
-                    checkerWindows += 1
+                val b = luma[y * width + (x + window - 1)]
+                val c = luma[(y + window - 1) * width + x]
+                val d = luma[(y + window - 1) * width + (x + window - 1)]
+                val s = (a - b) - (c - d)
+                val magnitude = abs(s) / 2f
+                if (magnitude > 0.6f) {
+                    checkerWindows++
                 }
-                totalWindows += 1
+                totalWindows++
+                x++
             }
+            y++
         }
-        return if (totalWindows == 0) 0f else checkerWindows.toFloat() / totalWindows
+        return if (totalWindows == 0) 0f else checkerWindows.toFloat() / totalWindows.toFloat()
     }
 
     private fun computeEntropy(luma: FloatArray): Float {
         if (luma.isEmpty()) return 0f
-        val bins = IntArray(256)
+        val hist = IntArray(256)
         for (value in luma) {
-            val bin = floor(clamp01(value) * 255f + 0.5f).toInt().coerceIn(0, 255)
-            bins[bin] = bins[bin] + 1
+            val bin = min(255, max(0, (value * 255f).toInt()))
+            hist[bin]++
         }
-        val total = luma.size.toFloat()
+        val total = luma.size.toDouble()
         var entropy = 0.0
-        for (count in bins) {
-            if (count == 0) continue
-            val p = count / total
-            entropy -= p * (ln(p.toDouble()) / ln(2.0))
+        for (count in hist) {
+            if (count > 0) {
+                val p = count / total
+                entropy += -p * (ln(p) / ln(2.0))
+            }
         }
         return entropy.toFloat()
+    }
+
+    private fun clamp01(v: Float): Float = when {
+        v < 0f -> 0f
+        v > 1f -> 1f
+        else -> v
+    }
+
+    private fun sigma(x: Float): Float {
+        val clamped = x.coerceIn(-20f, 20f)
+        return 1f / (1f + exp(-clamped))
     }
 }

@@ -46,6 +46,13 @@
             android:layout_height="wrap_content"
             android:text="@string/preset_placeholder" />
 
+        <TextView
+            android:id="@+id/tvPreScale"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="4dp"
+            android:text="@string/prescale_placeholder" />
+
         <RadioGroup
             android:id="@+id/overrideGroup"
             android:layout_width="match_parent"

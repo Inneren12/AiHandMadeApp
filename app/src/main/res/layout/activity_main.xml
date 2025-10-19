@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:id="@+id/detectedText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Detected: PHOTO (confidence 0.00)"
+        android:textAppearance="@android:style/TextAppearance.Medium"
+        android:paddingBottom="16dp" />
+
+    <RadioGroup
+        android:id="@+id/overrideGroup"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <RadioButton
+            android:id="@+id/radioPhoto"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="PHOTO" />
+
+        <RadioButton
+            android:id="@+id/radioDiscrete"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="DISCRETE"
+            android:layout_marginStart="16dp" />
+    </RadioGroup>
+
+    <Button
+        android:id="@+id/btnAnalyzeDemo"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Run demo analyze"
+        android:layout_marginTop="24dp" />
+
+</LinearLayout>

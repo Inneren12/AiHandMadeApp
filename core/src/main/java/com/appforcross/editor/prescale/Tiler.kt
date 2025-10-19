@@ -8,7 +8,7 @@ class Tiler(
     private val tileH: Int,
     private val overlap: Int
 ) {
-    inline fun forEachTile(visit: (x: Int, y: Int, w: Int, h: Int, ox: Int, oy: Int) -> Unit) {
+    fun forEachTile(visit: (x: Int, y: Int, w: Int, h: Int, ox: Int, oy: Int) -> Unit) {
         var y = 0
         while (y < H) {
             val th = minOf(tileH, H - y)

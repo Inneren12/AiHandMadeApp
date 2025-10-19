@@ -1,74 +1,86 @@
 package com.appforcross.editor.ui
 
 import android.app.Activity
+import android.content.Intent
+import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.RadioButton
 import android.widget.RadioGroup
+import android.widget.SeekBar
 import android.widget.TextView
 import com.appforcross.editor.R
 import com.appforcross.editor.logging.Logger
 import com.appforcross.editor.scene.SceneAnalyzer
 import com.appforcross.editor.scene.SceneKind
 
-class MainActivity : Activity() {
+class MainActivity : Activity(), PreviewController.Listener {
+
+    private lateinit var controller: PreviewController
+    private lateinit var previewImage: ImageView
+    private lateinit var infoText: TextView
+    private lateinit var detectedText: TextView
+    private lateinit var btnProcessAsPhoto: Button
+    private lateinit var rbPhoto: RadioButton
+    private lateinit var rbDiscrete: RadioButton
+    private lateinit var overrideGroup: RadioGroup
+
+    private var currentBitmap: Bitmap? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        val detected = findViewById<TextView>(R.id.detectedText)
-        val overrideGroup = findViewById<RadioGroup>(R.id.overrideGroup)
-        val rbPhoto = findViewById<RadioButton>(R.id.rbPhoto)
-        val btnAnalyzeGradient = findViewById<Button>(R.id.btnAnalyzeGradient)
-        val btnAnalyzeChecker = findViewById<Button>(R.id.btnAnalyzeChecker)
-        val btnProcessAsPhoto = findViewById<Button>(R.id.btnProcessAsPhoto)
+        previewImage = findViewById(R.id.previewImage)
+        infoText = findViewById(R.id.tvInfo)
+        detectedText = findViewById(R.id.detectedText)
+        btnProcessAsPhoto = findViewById(R.id.btnProcessAsPhoto)
+        rbPhoto = findViewById(R.id.rbPhoto)
+        rbDiscrete = findViewById(R.id.rbDiscrete)
+        overrideGroup = findViewById(R.id.overrideGroup)
 
-        rbPhoto.isChecked = true
+        controller = PreviewController()
+        controller.setListener(this)
 
-        fun render(kind: SceneKind, confidence: Float, via: String) {
-            detected.text = "Detected: ${kind.name}  (confidence ${"%.2f".format(confidence)})"
-            btnProcessAsPhoto.visibility = if (kind == SceneKind.DISCRETE) View.VISIBLE else View.GONE
-            Logger.i(
-                "UI",
-                "analyze",
-                mapOf(
-                    "via" to via,
-                    "kind" to kind.name,
-                    "confidence" to confidence
-                )
-            )
-        }
+        findViewById<Button>(R.id.btnImport).setOnClickListener { pickImage() }
 
-        fun manualOverride(): SceneKind? = when (overrideGroup.checkedRadioButtonId) {
-            R.id.rbPhoto -> SceneKind.PHOTO
-            R.id.rbDiscrete -> SceneKind.DISCRETE
-            else -> null
-        }
+        val seekScale = findViewById<SeekBar>(R.id.seekScale)
+        val tvScaleVal = findViewById<TextView>(R.id.tvScaleVal)
+        seekScale.max = 290
+        seekScale.progress = 90
+        tvScaleVal.text = formatScaleLabel(100)
+        seekScale.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val pct = 10 + progress
+                tvScaleVal.text = formatScaleLabel(pct)
+                controller.setScalePercent(pct)
+            }
 
-        btnAnalyzeGradient.setOnClickListener {
-            val (rgb, w, h) = demoGradient(128, 64)
-            val decision = SceneAnalyzer.analyzePreview(rgb, w, h)
-            val forced = manualOverride()
-            render(forced ?: decision.kind, if (forced == null) decision.confidence else 1f, "gradient")
-        }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+            override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+        })
 
-        btnAnalyzeChecker.setOnClickListener {
-            val (rgb, w, h) = demoChecker(96, 96)
-            val decision = SceneAnalyzer.analyzePreview(rgb, w, h)
-            val forced = manualOverride()
-            render(forced ?: decision.kind, if (forced == null) decision.confidence else 1f, "checker")
-        }
+        val seekK = findViewById<SeekBar>(R.id.seekK)
+        val tvKVal = findViewById<TextView>(R.id.tvKVal)
+        seekK.max = 64
+        seekK.progress = 0
+        tvKVal.text = formatKLabel(0)
+        seekK.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                tvKVal.text = formatKLabel(progress)
+                controller.setQuantK(progress)
+            }
 
-        btnProcessAsPhoto.setOnClickListener {
-            Logger.i("UI", "override", mapOf("to" to SceneKind.PHOTO.name))
-            overrideGroup.check(R.id.rbPhoto)
-            render(SceneKind.PHOTO, 1f, "override")
-        }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+            override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+        })
 
+        overrideGroup.clearCheck()
         overrideGroup.setOnCheckedChangeListener { _, checkedId ->
-            val kind = when (checkedId) {
+            val overrideKind = when (checkedId) {
                 R.id.rbPhoto -> SceneKind.PHOTO
                 R.id.rbDiscrete -> SceneKind.DISCRETE
                 else -> return@setOnCheckedChangeListener
@@ -76,38 +88,102 @@ class MainActivity : Activity() {
             Logger.i(
                 "UI",
                 "override",
-                mapOf(
-                    "checked" to kind.name
-                )
+                mapOf("checked" to overrideKind.name)
             )
+            currentBitmap?.let { analyzeAndRender(it, via = "override") }
+        }
+
+        btnProcessAsPhoto.setOnClickListener {
+            Logger.i("UI", "override", mapOf("to" to SceneKind.PHOTO.name))
+            overrideGroup.check(R.id.rbPhoto)
+            renderDetected(SceneKind.PHOTO, 1f, via = "override-button")
+        }
+
+        detectedText.text = getString(R.string.detected_placeholder)
+        infoText.text = getString(R.string.info_placeholder)
+    }
+
+    override fun onDestroy() {
+        controller.shutdown()
+        currentBitmap?.takeIf { !it.isRecycled }?.recycle()
+        currentBitmap = null
+        super.onDestroy()
+    }
+
+    private fun pickImage() {
+        val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+            type = "image/*"
+            addCategory(Intent.CATEGORY_OPENABLE)
+        }
+        startActivityForResult(Intent.createChooser(intent, getString(R.string.import_image_title)), REQ_PICK)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_PICK && resultCode == RESULT_OK) {
+            val uri: Uri = data?.data ?: return
+            contentResolver.openInputStream(uri)?.use { stream -> controller.setSourceFromStream(stream) }
         }
     }
 
-    private fun demoGradient(w: Int, h: Int): Triple<FloatArray, Int, Int> {
-        val rgb = FloatArray(w * h * 3)
-        var p = 0
-        for (y in 0 until h) {
-            for (x in 0 until w) {
-                val v = x.toFloat() / (w - 1).toFloat()
-                rgb[p++] = v
-                rgb[p++] = v
-                rgb[p++] = v
-            }
-        }
-        return Triple(rgb, w, h)
+    override fun onSourceInfo(width: Int, height: Int) {
+        infoText.text = getString(R.string.info_template, width, height)
     }
 
-    private fun demoChecker(w: Int, h: Int): Triple<FloatArray, Int, Int> {
+    override fun onPreviewReady(bitmap: Bitmap, width: Int, height: Int) {
+        currentBitmap?.takeIf { it != bitmap && !it.isRecycled }?.recycle()
+        currentBitmap = bitmap
+        previewImage.setImageBitmap(bitmap)
+        analyzeAndRender(bitmap, via = "preview")
+    }
+
+    private fun analyzeAndRender(bitmap: Bitmap, via: String) {
+        val w = bitmap.width
+        val h = bitmap.height
+        if (w == 0 || h == 0) return
+        val pixels = IntArray(w * h)
+        bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
         val rgb = FloatArray(w * h * 3)
-        var p = 0
-        for (y in 0 until h) {
-            for (x in 0 until w) {
-                val v = if (((x + y) and 1) == 0) 1f else 0f
-                rgb[p++] = v
-                rgb[p++] = v
-                rgb[p++] = v
-            }
+        var i = 0
+        for (px in pixels) {
+            val r = (px shr 16 and 0xFF) / 255f
+            val g = (px shr 8 and 0xFF) / 255f
+            val b = (px and 0xFF) / 255f
+            rgb[i++] = r
+            rgb[i++] = g
+            rgb[i++] = b
         }
-        return Triple(rgb, w, h)
+        val decision = SceneAnalyzer.analyzePreview(rgb, w, h)
+        val forced = manualOverride()
+        renderDetected(forced ?: decision.kind, if (forced == null) decision.confidence else 1f, via)
+    }
+
+    private fun manualOverride(): SceneKind? = when (overrideGroup.checkedRadioButtonId) {
+        R.id.rbPhoto -> SceneKind.PHOTO
+        R.id.rbDiscrete -> SceneKind.DISCRETE
+        else -> null
+    }
+
+    private fun renderDetected(kind: SceneKind, confidence: Float, via: String) {
+        detectedText.text = getString(R.string.detected_template, kind.name, confidence)
+        btnProcessAsPhoto.visibility = if (kind == SceneKind.DISCRETE) View.VISIBLE else View.GONE
+        Logger.i(
+            "UI",
+            "analyze",
+            mapOf(
+                "via" to via,
+                "kind" to kind.name,
+                "confidence" to confidence
+            )
+        )
+    }
+
+    private fun formatScaleLabel(percent: Int): String = getString(R.string.scale_template, percent)
+
+    private fun formatKLabel(k: Int): String =
+        if (k <= 0) getString(R.string.quant_off) else getString(R.string.quant_template, k)
+
+    companion object {
+        private const val REQ_PICK = 1001
     }
 }

@@ -42,10 +42,12 @@ jobs:
           sdkmanager --list | head -n 50
 
       - name: Core tests
-        run: gradle :core:test --console=plain --no-daemon
+        run: |
+          gradle :core:compileKotlin --console=plain --no-daemon --stacktrace --info
+          gradle :core:test          --console=plain --no-daemon --stacktrace --info
 
       - name: Assemble app (debug)
-        run: gradle :app:assembleDebug --console=plain --no-daemon
+        run: gradle :app:assembleDebug --console=plain --no-daemon --stacktrace --info
 
       - name: Upload APK artifact
         if: always()

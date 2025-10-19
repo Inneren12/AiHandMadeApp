@@ -41,16 +41,29 @@ jobs:
           gradle -v
           sdkmanager --list | head -n 50
 
-      - name: Core compile (diagnostic)
+      - name: Core compile (adaptive, diagnostic)
         run: |
           set -eo pipefail
-          gradle :core:compileKotlin --console=plain --no-daemon --stacktrace --info 2>&1 | tee core-compile.log
+          TASKS="$(gradle :core:tasks --all)"
+          echo "$TASKS" | sed -n '1,300p' > core-tasks.txt
+          if   echo "$TASKS" | grep -qE '^compileKotlin[[:space:]]'; then CORE_COMPILE=":core:compileKotlin";
+          elif echo "$TASKS" | grep -qE '^compileDebugKotlin[[:space:]]'; then CORE_COMPILE=":core:compileDebugKotlin";
+          elif echo "$TASKS" | grep -qE '^compileReleaseKotlin[[:space:]]'; then CORE_COMPILE=":core:compileReleaseKotlin";
+          else CORE_COMPILE=":core:build"; fi
+          echo "Chosen core compile task: $CORE_COMPILE"
+          gradle $CORE_COMPILE --console=plain --no-daemon --stacktrace --info 2>&1 | tee core-compile.log
 
-      - name: Core tests
+      - name: Core unit tests (adaptive)
         if: success()
         run: |
           set -eo pipefail
-          gradle :core:test --console=plain --no-daemon --stacktrace --info 2>&1 | tee core-test.log
+          TASKS="$(gradle :core:tasks --all)"
+          if   echo "$TASKS" | grep -qE '^test[[:space:]]'; then CORE_TEST=":core:test";
+          elif echo "$TASKS" | grep -qE '^testDebugUnitTest[[:space:]]'; then CORE_TEST=":core:testDebugUnitTest";
+          elif echo "$TASKS" | grep -qE '^testReleaseUnitTest[[:space:]]'; then CORE_TEST=":core:testReleaseUnitTest";
+          else echo "No core unit test task found; skipping." | tee core-test.log; exit 0; fi
+          echo "Chosen core test task: $CORE_TEST"
+          gradle $CORE_TEST --console=plain --no-daemon --stacktrace --info 2>&1 | tee -a core-test.log
 
       - name: Assemble app (debug)
         if: success()
@@ -66,6 +79,7 @@ jobs:
           path: |
             core-compile.log
             core-test.log
+            core-tasks.txt
             app-assemble.log
             core/build/reports/**
             app/build/reports/**

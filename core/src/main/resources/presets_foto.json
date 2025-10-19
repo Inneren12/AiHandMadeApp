@@ -1,0 +1,40 @@
+{
+  "presets": [
+    {
+      "id": "AUTO_BALANCED",
+      "label": "Auto balanced",
+      "kSigma": 0.9,
+      "edgeMult": 0.9,
+      "flatMult": 1.0,
+      "filter": "EWA_Mitchell",
+      "addons": []
+    },
+    {
+      "id": "PORTRAIT_SOFT",
+      "label": "Portrait soft",
+      "kSigma": 0.8,
+      "edgeMult": 0.8,
+      "flatMult": 1.1,
+      "filter": "EWA_Mitchell",
+      "addons": ["ADD_SKIN_PROTECT"]
+    },
+    {
+      "id": "LANDSCAPE_GRADIENTS",
+      "label": "Landscape gradients",
+      "kSigma": 1.0,
+      "edgeMult": 0.9,
+      "flatMult": 1.2,
+      "filter": "EWA_Lanczos3",
+      "addons": ["ADD_SKY_BANDING_SHIELD"]
+    },
+    {
+      "id": "ARCHITECTURE_EDGES",
+      "label": "Architecture edges",
+      "kSigma": 0.7,
+      "edgeMult": 0.7,
+      "flatMult": 1.0,
+      "filter": "EWA_Lanczos3",
+      "addons": ["ADD_EDGE_GUARD"]
+    }
+  ]
+}

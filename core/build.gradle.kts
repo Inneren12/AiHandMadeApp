@@ -9,7 +9,14 @@ plugins {
 android {
     namespace = "com.appforcross.core"
     compileSdk = 35
-    defaultConfig { minSdk = 29 }
+    defaultConfig {
+        minSdk = 29
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = false
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

@@ -1,0 +1,7 @@
+/.idea
+/.gradle
+/build
+**/build
+local.properties
+# Wrapper jar — бинарник запрещён:
+gradle/wrapper/gradle-wrapper.jar

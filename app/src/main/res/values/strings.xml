@@ -18,4 +18,6 @@
     <string name="quant_template">K=%1$d</string>
     <string name="process_as_photo">Process as PHOTO</string>
     <string name="preset_label">Preset: %1$s  (conf %2$.2f)</string>
+    <string name="prescale_placeholder">PreScale: —</string>
+    <string name="prescale_label">PreScale: Wst=%1$d σ=%2$.2f phase=%3$d,%4$d filter=%5$s SSIM=%6$.3f Edge=%7$.3f Band=%8$.3f</string>
 </resources>

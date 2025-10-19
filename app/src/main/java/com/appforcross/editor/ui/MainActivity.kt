@@ -14,6 +14,9 @@ import android.widget.SeekBar
 import android.widget.TextView
 import com.appforcross.editor.R
 import com.appforcross.editor.logging.Logger
+import com.appforcross.editor.prescale.BuildSpec
+import com.appforcross.editor.prescale.ImageOps
+import com.appforcross.editor.prescale.RunFull
 import com.appforcross.editor.scene.SceneAnalyzer
 import com.appforcross.editor.scene.SceneDecision
 import com.appforcross.editor.scene.SceneKind
@@ -27,6 +30,7 @@ class MainActivity : Activity(), PreviewController.Listener {
     private lateinit var infoText: TextView
     private lateinit var detectedText: TextView
     private lateinit var presetText: TextView
+    private lateinit var preScaleText: TextView
     private lateinit var btnProcessAsPhoto: Button
     private lateinit var rbPhoto: RadioButton
     private lateinit var rbDiscrete: RadioButton
@@ -36,6 +40,10 @@ class MainActivity : Activity(), PreviewController.Listener {
 
     private var currentBitmap: Bitmap? = null
 
+    private var lastPreviewRgb: FloatArray? = null
+    private var lastPreviewWidth: Int = 0
+    private var lastPreviewHeight: Int = 0
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -44,6 +52,7 @@ class MainActivity : Activity(), PreviewController.Listener {
         infoText = findViewById(R.id.tvInfo)
         detectedText = findViewById(R.id.detectedText)
         presetText = findViewById(R.id.tvPreset)
+        preScaleText = findViewById(R.id.tvPreScale)
         btnProcessAsPhoto = findViewById(R.id.btnProcessAsPhoto)
         rbPhoto = findViewById(R.id.rbPhoto)
         rbDiscrete = findViewById(R.id.rbDiscrete)
@@ -109,6 +118,7 @@ class MainActivity : Activity(), PreviewController.Listener {
         detectedText.text = getString(R.string.detected_placeholder)
         infoText.text = getString(R.string.info_placeholder)
         presetText.text = getString(R.string.preset_placeholder)
+        preScaleText.text = getString(R.string.prescale_placeholder)
     }
 
     override fun onDestroy() {
@@ -149,7 +159,12 @@ class MainActivity : Activity(), PreviewController.Listener {
     private fun analyzeAndRender(bitmap: Bitmap, via: String) {
         val w = bitmap.width
         val h = bitmap.height
-        if (w == 0 || h == 0) return
+        if (w == 0 || h == 0) {
+            lastPreviewRgb = null
+            lastPreviewWidth = 0
+            lastPreviewHeight = 0
+            return
+        }
         val pixels = IntArray(w * h)
         bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
         val rgb = FloatArray(w * h * 3)
@@ -162,6 +177,9 @@ class MainActivity : Activity(), PreviewController.Listener {
             rgb[i++] = g
             rgb[i++] = b
         }
+        lastPreviewRgb = rgb
+        lastPreviewWidth = w
+        lastPreviewHeight = h
         val decision = SceneAnalyzer.analyzePreview(rgb, w, h)
         lastSceneDecision = decision
         val forced = manualOverride()
@@ -196,8 +214,14 @@ class MainActivity : Activity(), PreviewController.Listener {
 
     private fun renderPreset(kind: SceneKind) {
         val decision = lastSceneDecision
-        if (decision == null || kind != SceneKind.PHOTO) {
+        if (decision == null) {
             presetText.text = getString(R.string.preset_placeholder)
+            preScaleText.text = getString(R.string.prescale_placeholder)
+            return
+        }
+        if (kind != SceneKind.PHOTO) {
+            presetText.text = getString(R.string.preset_placeholder)
+            preScaleText.text = getString(R.string.prescale_placeholder)
             return
         }
         val presetDecision = ScenePresetHook.decideForFoto(decision.features)
@@ -209,6 +233,31 @@ class MainActivity : Activity(), PreviewController.Listener {
                 "id" to presetDecision.preset.id,
                 "confidence" to String.format(Locale.US, "%.3f", presetDecision.confidence)
             )
+        )
+        val rgb = lastPreviewRgb
+        val w = lastPreviewWidth
+        val h = lastPreviewHeight
+        if (rgb == null || w <= 0 || h <= 0) {
+            preScaleText.text = getString(R.string.prescale_placeholder)
+            return
+        }
+        val luminance = FloatArray(w * h) { index ->
+            val p = index * 3
+            0.2126f * rgb[p] + 0.7152f * rgb[p + 1] + 0.0722f * rgb[p + 2]
+        }
+        val buildDecision = BuildSpec.decide(w, h, luminance)
+        val verify = RunFull.run(ImageOps.packToF16(rgb, w, h), buildDecision).verify
+        preScaleText.text = String.format(
+            Locale.US,
+            getString(R.string.prescale_label),
+            buildDecision.wst,
+            buildDecision.sigma,
+            buildDecision.phase.dx,
+            buildDecision.phase.dy,
+            buildDecision.filter,
+            verify.ssimProxy,
+            verify.edgeKeep,
+            verify.bandIdx
         )
     }
 

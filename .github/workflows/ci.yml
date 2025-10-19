@@ -44,19 +44,19 @@ jobs:
       - name: Core compile (diagnostic)
         run: |
           set -eo pipefail
-          gradle :core:compileKotlin --console=plain --no-daemon --stacktrace --info | tee core-compile.log
+          gradle :core:compileKotlin --console=plain --no-daemon --stacktrace --info 2>&1 | tee core-compile.log
 
       - name: Core tests
         if: success()
         run: |
           set -eo pipefail
-          gradle :core:test --console=plain --no-daemon --stacktrace --info | tee core-test.log
+          gradle :core:test --console=plain --no-daemon --stacktrace --info 2>&1 | tee core-test.log
 
       - name: Assemble app (debug)
         if: success()
         run: |
           set -eo pipefail
-          gradle :app:assembleDebug --console=plain --no-daemon --stacktrace --info | tee app-assemble.log
+          gradle :app:assembleDebug --console=plain --no-daemon --stacktrace --info 2>&1 | tee app-assemble.log
 
       - name: Upload logs & reports (always)
         if: always()

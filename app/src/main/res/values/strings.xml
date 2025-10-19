@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">AiHandMadeApp</string>
+    <string name="import_image_title">Select Image</string>
+    <string name="info_placeholder">Source: —</string>
+    <string name="detected_placeholder">Detected: —</string>
+    <string name="info_template">Source: %1$d×%2$d</string>
+    <string name="detected_template">Detected: %1$s  (confidence %.2f)</string>
+    <string name="scale_template">%1$d%%</string>
+    <string name="quant_off">K=off</string>
+    <string name="quant_template">K=%1$d</string>
+</resources>

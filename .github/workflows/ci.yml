@@ -46,29 +46,29 @@ jobs:
           set -eo pipefail
           gradle :core:compileKotlin --console=plain --no-daemon --stacktrace --info | tee core-compile.log
 
-      - name: Core test-compile (diagnostic)
-        run: |
-          set -eo pipefail
-          gradle :core:cleanTest :core:compileTestKotlin --console=plain --no-daemon --stacktrace --debug | tee core-compileTest.log
-
       - name: Core tests
+        if: success()
         run: |
           set -eo pipefail
           gradle :core:test --console=plain --no-daemon --stacktrace --info | tee core-test.log
 
       - name: Assemble app (debug)
-        run: gradle :app:assembleDebug --console=plain --no-daemon --stacktrace --info | tee app-assemble.log
+        if: success()
+        run: |
+          set -eo pipefail
+          gradle :app:assembleDebug --console=plain --no-daemon --stacktrace --info | tee app-assemble.log
 
-      - name: Upload logs
+      - name: Upload logs & reports (always)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-logs
+          name: build-logs-and-reports
           path: |
             core-compile.log
-            core-compileTest.log
             core-test.log
             app-assemble.log
+            core/build/reports/**
+            app/build/reports/**
 
       - name: Upload APK artifact
         if: always()

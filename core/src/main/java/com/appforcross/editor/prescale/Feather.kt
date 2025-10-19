@@ -1,8 +1,5 @@
 package com.appforcross.editor.prescale
 
-import kotlin.math.max
-import kotlin.math.min
-
 /** Линейный feather-блендинг для тайлов. */
 object Feather {
     fun blend(
@@ -39,12 +36,23 @@ object Feather {
         }
     }
 
+    /**
+     * Одномерный вес с “смещённой” линейной рампой в зоне overlap.
+     * eps > 0 гарантирует, что сумма весов соседних тайлов в шве не равна нулю.
+     */
     private fun weight(p: Int, len: Int, ov: Int): Float {
         if (ov <= 0) return 1f
-        val left = p.toFloat() / ov.toFloat()
-        val right = (len - 1 - p).toFloat() / ov.toFloat()
-        val wl = if (p < ov) max(0f, min(1f, left)) else 1f
-        val wr = if (len - 1 - p < ov) max(0f, min(1f, right)) else 1f
-        return min(wl, wr)
+        val eps = 1e-3f
+        return when {
+            p < ov -> {
+                val t = (p.toFloat() + 0.5f) / ov.toFloat()
+                t.coerceIn(0f, 1f).coerceAtLeast(eps)
+            }
+            len - 1 - p < ov -> {
+                val t = ((len - 1 - p).toFloat() + 0.5f) / ov.toFloat()
+                t.coerceIn(0f, 1f).coerceAtLeast(eps)
+            }
+            else -> 1f
+        }
     }
 }

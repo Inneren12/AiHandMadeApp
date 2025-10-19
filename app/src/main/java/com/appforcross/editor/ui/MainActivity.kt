@@ -15,7 +15,10 @@ import android.widget.TextView
 import com.appforcross.editor.R
 import com.appforcross.editor.logging.Logger
 import com.appforcross.editor.scene.SceneAnalyzer
+import com.appforcross.editor.scene.SceneDecision
 import com.appforcross.editor.scene.SceneKind
+import com.appforcross.editor.scene.ScenePresetHook
+import java.util.Locale
 
 class MainActivity : Activity(), PreviewController.Listener {
 
@@ -23,10 +26,13 @@ class MainActivity : Activity(), PreviewController.Listener {
     private lateinit var previewImage: ImageView
     private lateinit var infoText: TextView
     private lateinit var detectedText: TextView
+    private lateinit var presetText: TextView
     private lateinit var btnProcessAsPhoto: Button
     private lateinit var rbPhoto: RadioButton
     private lateinit var rbDiscrete: RadioButton
     private lateinit var overrideGroup: RadioGroup
+
+    private var lastSceneDecision: SceneDecision? = null
 
     private var currentBitmap: Bitmap? = null
 
@@ -37,6 +43,7 @@ class MainActivity : Activity(), PreviewController.Listener {
         previewImage = findViewById(R.id.previewImage)
         infoText = findViewById(R.id.tvInfo)
         detectedText = findViewById(R.id.detectedText)
+        presetText = findViewById(R.id.tvPreset)
         btnProcessAsPhoto = findViewById(R.id.btnProcessAsPhoto)
         rbPhoto = findViewById(R.id.rbPhoto)
         rbDiscrete = findViewById(R.id.rbDiscrete)
@@ -101,6 +108,7 @@ class MainActivity : Activity(), PreviewController.Listener {
 
         detectedText.text = getString(R.string.detected_placeholder)
         infoText.text = getString(R.string.info_placeholder)
+        presetText.text = getString(R.string.preset_placeholder)
     }
 
     override fun onDestroy() {
@@ -155,6 +163,7 @@ class MainActivity : Activity(), PreviewController.Listener {
             rgb[i++] = b
         }
         val decision = SceneAnalyzer.analyzePreview(rgb, w, h)
+        lastSceneDecision = decision
         val forced = manualOverride()
         renderDetected(forced ?: decision.kind, if (forced == null) decision.confidence else 1f, via)
     }
@@ -177,12 +186,31 @@ class MainActivity : Activity(), PreviewController.Listener {
                 "confidence" to confidence
             )
         )
+        renderPreset(kind)
     }
 
     private fun formatScaleLabel(percent: Int): String = getString(R.string.scale_template, percent)
 
     private fun formatKLabel(k: Int): String =
         if (k <= 0) getString(R.string.quant_off) else getString(R.string.quant_template, k)
+
+    private fun renderPreset(kind: SceneKind) {
+        val decision = lastSceneDecision
+        if (decision == null || kind != SceneKind.PHOTO) {
+            presetText.text = getString(R.string.preset_placeholder)
+            return
+        }
+        val presetDecision = ScenePresetHook.decideForFoto(decision.features)
+        presetText.text = getString(R.string.preset_label, presetDecision.preset.id, presetDecision.confidence)
+        Logger.i(
+            "UI",
+            "preset",
+            mapOf(
+                "id" to presetDecision.preset.id,
+                "confidence" to String.format(Locale.US, "%.3f", presetDecision.confidence)
+            )
+        )
+    }
 
     companion object {
         private const val REQ_PICK = 1001

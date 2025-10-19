@@ -2,117 +2,55 @@ package com.appforcross.editor.tools
 
 import com.appforcross.editor.data.BN64Spec
 import com.appforcross.editor.data.BlueNoise64
-import java.nio.file.Files
-import java.nio.file.Path
-import kotlin.system.exitProcess
+import java.io.File
 
 /**
- * Console entry point for generating 64×64 blue-noise maps on demand.
+ * Console tool (optional). Does nothing by itself in app runtime.
+ * You may run it manually to produce a file:
+ *
+ * kotlinc BlueNoise64.kt BlueNoise64Tool.kt -include-runtime -d BlueNoise64Tool.jar
+ * java -jar BlueNoise64Tool.jar --out blue_noise_64x64.bin --size 64 --passes 4 --sigma1 1.2 --sigma2 2.4 --seed 0xA1F00D01
  */
 object BlueNoise64Tool {
+
     @JvmStatic
     fun main(args: Array<String>) {
-        try {
-            val options = parseArgs(args)
-            val defaults = BN64Spec()
-            val spec = BN64Spec(
-                size = options.size ?: defaults.size,
-                passes = options.passes ?: defaults.passes,
-                sigma1 = options.sigma1 ?: defaults.sigma1,
-                sigma2 = options.sigma2 ?: defaults.sigma2,
-                seed = options.seed ?: defaults.seed,
-                method = defaults.method
-            )
-            val bytes = BlueNoise64.generate(spec)
-            options.out?.let { path ->
-                writeToFile(path, bytes)
-            }
-            val hash = BlueNoise64.sha256(bytes)
-            println("BlueNoise64 generated ${bytes.size} bytes, sha256=$hash")
-        } catch (ex: IllegalArgumentException) {
-            System.err.println("Error: ${ex.message}")
-            printUsage()
-            exitProcess(1)
-        }
-    }
+        val argMap = parseArgs(args)
+        val size   = (argMap["--size"] ?: "64").toInt()
+        val passes = (argMap["--passes"] ?: "4").toInt()
+        val sigma1 = (argMap["--sigma1"] ?: "1.2").toDouble()
+        val sigma2 = (argMap["--sigma2"] ?: "2.4").toDouble()
+        val seed   = decodeLong(argMap["--seed"] ?: "0xA1F00D01")
+        val out    = argMap["--out"] // optional
 
-    private fun parseArgs(args: Array<String>): Options {
-        var index = 0
-        val options = Options()
-        while (index < args.size) {
-            when (val arg = args[index]) {
-                "--out" -> {
-                    index++
-                    require(index < args.size) { "--out requires a path" }
-                    options.out = args[index]
-                }
-                "--size" -> {
-                    options.size = readInt(args, ++index, "--size")
-                }
-                "--passes" -> {
-                    options.passes = readInt(args, ++index, "--passes")
-                }
-                "--sigma1" -> {
-                    options.sigma1 = readDouble(args, ++index, "--sigma1")
-                }
-                "--sigma2" -> {
-                    options.sigma2 = readDouble(args, ++index, "--sigma2")
-                }
-                "--seed" -> {
-                    options.seed = readLong(args, ++index, "--seed")
-                }
-                "--help", "-h" -> {
-                    printUsage()
-                    exitProcess(0)
-                }
-                else -> throw IllegalArgumentException("Unknown argument: $arg")
-            }
-            index++
-        }
-        return options
-    }
+        val spec = BN64Spec(size = size, passes = passes, sigma1 = sigma1, sigma2 = sigma2, seed = seed)
+        val bytes = BlueNoise64.generate(spec)
 
-    private fun readInt(args: Array<String>, index: Int, flag: String): Int {
-        require(index < args.size) { "$flag requires a value" }
-        return args[index].toInt()
-    }
-
-    private fun readDouble(args: Array<String>, index: Int, flag: String): Double {
-        require(index < args.size) { "$flag requires a value" }
-        return args[index].toDouble()
-    }
-
-    private fun readLong(args: Array<String>, index: Int, flag: String): Long {
-        require(index < args.size) { "$flag requires a value" }
-        val token = args[index]
-        return if (token.startsWith("0x", ignoreCase = true)) {
-            token.substring(2).toLong(16)
+        if (out != null) {
+            val f = File(out)
+            f.parentFile?.mkdirs()
+            f.writeBytes(bytes)
+            println("""{"lvl":"I","tag":"ASSETS","evt":"write","data":{"path":"${f.absolutePath}","bytes":${bytes.size}}}""")
         } else {
-            token.toLong()
+            // No file is produced unless --out is explicitly provided.
+            println("""{"lvl":"I","tag":"ASSETS","evt":"note","data":{"info":"No --out specified; bytes kept in memory only"}}""")
         }
     }
 
-    private fun writeToFile(path: String, bytes: ByteArray) {
-        val target = Path.of(path)
-        target.parent?.let { parent ->
-            Files.createDirectories(parent)
+    // --- helpers ---
+    private fun parseArgs(argv: Array<String>): Map<String, String> {
+        val m = LinkedHashMap<String, String>()
+        var i = 0
+        while (i < argv.size) {
+            val k = argv[i]
+            if (k.startsWith("--") && i + 1 < argv.size && !argv[i + 1].startsWith("--")) {
+                m[k] = argv[i + 1]; i += 2
+            } else {
+                m[k] = ""; i += 1
+            }
         }
-        Files.write(target, bytes)
+        return m
     }
-
-    private fun printUsage() {
-        println(
-            "Usage: BlueNoise64Tool --out <path> [--size N] [--passes N] " +
-                "[--sigma1 F] [--sigma2 F] [--seed N]"
-        )
-    }
-
-    private class Options {
-        var out: String? = null
-        var size: Int? = null
-        var passes: Int? = null
-        var sigma1: Double? = null
-        var sigma2: Double? = null
-        var seed: Long? = null
-    }
+    private fun decodeLong(s: String): Long =
+        try { java.lang.Long.decode(s) } catch (_: Throwable) { s.toLong() }
 }

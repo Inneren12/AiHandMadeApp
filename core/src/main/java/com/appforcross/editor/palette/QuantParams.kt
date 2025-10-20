@@ -30,5 +30,8 @@ data class QuantMetrics(
     val K: Int,
     val avgDE: Float,
     val maxDE: Float,
-    val photoScoreStar: Float
+    val minDE: Float,
+    val p95DE: Float,
+    val photoScoreStar: Float,
+    val gbiProxy: Float
 )

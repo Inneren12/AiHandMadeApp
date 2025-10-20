@@ -21,6 +21,12 @@ import com.appforcross.editor.prescale.PreScaleOrchestrator
 import com.appforcross.editor.scene.SceneAnalyzer
 import com.appforcross.editor.scene.SceneDecision
 import com.appforcross.editor.scene.SceneKind
+import com.appforcross.editor.palette.GreedyQuant
+import com.appforcross.editor.palette.QuantParams
+import com.appforcross.editor.palette.Topology
+import com.appforcross.editor.palette.TopologyParams
+import com.appforcross.editor.palette.dither.DitherParams
+import com.appforcross.editor.palette.dither.OrderedDither
 import java.util.Locale
 
 class MainActivity : Activity(), PreviewController.Listener {
@@ -350,8 +356,37 @@ class MainActivity : Activity(), PreviewController.Listener {
                 "tile.overlap" to EXPORT_OVERLAP
             )
         )
-        val index = naiveAssign(rgb, width, height, colors)
-        val paletteCodes = generatePaletteCodes(colors)
+        val quantParams = QuantParams(
+            kStart = colors.coerceAtLeast(2),
+            kMax = colors.coerceAtLeast(2)
+        )
+        val quant = GreedyQuant.run(rgb, width, height, quantParams)
+        val paletteRgb = okLabPaletteToLinearRgb(quant.colorsOKLab)
+        val dithered = OrderedDither.apply(
+            rgb,
+            quant.assignments,
+            paletteRgb,
+            width,
+            height,
+            DitherParams()
+        )
+        val (index, topoMetrics) = Topology.clean(
+            dithered,
+            width,
+            height,
+            TopologyParams()
+        )
+        Logger.i(
+            "EXPORT",
+            "verify",
+            mapOf(
+                "stage" to "ui.export",
+                "topology.changes_per100" to String.format(Locale.US, "%.2f", topoMetrics.changesPer100),
+                "topology.islands_per1000" to String.format(Locale.US, "%.2f", topoMetrics.smallIslandsPer1000),
+                "topology.runlen_p50" to String.format(Locale.US, "%.2f", topoMetrics.runLen50)
+            )
+        )
+        val paletteCodes = generatePaletteCodes(paletteRgb)
         val legend = LegendBuilder.build(paletteCodes)
         val bundle = PatternLayout.paginate(
             index,
@@ -373,28 +408,50 @@ class MainActivity : Activity(), PreviewController.Listener {
         )
     }
 
-    /** Простейшая квантовка: делим диапазон яркости на K уровней. */
-    private fun naiveAssign(rgb: FloatArray, width: Int, height: Int, colors: Int): IntArray {
-        val total = width * height
-        val result = IntArray(total)
-        val maxIndex = (colors - 1).coerceAtLeast(0)
-        var p = 0
-        for (i in 0 until total) {
-            val l = 0.2126f * rgb[p] + 0.7152f * rgb[p + 1] + 0.0722f * rgb[p + 2]
-            val scaled = (l.coerceIn(0f, 1f) * maxIndex + 0.5f).toInt()
-            result[i] = scaled.coerceIn(0, maxIndex)
-            p += 3
+    private fun okLabPaletteToLinearRgb(palette: FloatArray): FloatArray {
+        val colors = palette.size / 3
+        val out = FloatArray(colors * 3)
+        for (i in 0 until colors) {
+            val l = palette[i * 3 + 0]
+            val a = palette[i * 3 + 1]
+            val b = palette[i * 3 + 2]
+            val l_ = l + 0.3963377774f * a + 0.2158037573f * b
+            val m_ = l - 0.1055613458f * a - 0.0638541728f * b
+            val s_ = l - 0.0894841775f * a - 1.2914855480f * b
+            val l3 = l_ * l_ * l_
+            val m3 = m_ * m_ * m_
+            val s3 = s_ * s_ * s_
+            val r = 4.0767416621f * l3 - 3.3077115913f * m3 + 0.2309699292f * s3
+            val g = -1.2684380046f * l3 + 2.6097574011f * m3 - 0.3413193965f * s3
+            val bCh = -0.0041960863f * l3 - 0.7034186147f * m3 + 1.7076147010f * s3
+            out[i * 3 + 0] = r.coerceIn(0f, 1f)
+            out[i * 3 + 1] = g.coerceIn(0f, 1f)
+            out[i * 3 + 2] = bCh.coerceIn(0f, 1f)
         }
-        return result
+        return out
     }
 
-    private fun generatePaletteCodes(colors: Int): List<String> {
-        if (colors <= 1) return listOf("#000000")
+    private fun generatePaletteCodes(paletteRgb: FloatArray): List<String> {
+        val colors = paletteRgb.size / 3
         val codes = ArrayList<String>(colors)
         for (i in 0 until colors) {
-            val shade = (255f * i / (colors - 1)).toInt().coerceIn(0, 255)
-            codes += String.format(Locale.US, "#%02X%02X%02X", shade, shade, shade)
+            val r = linearToSrgbChannel(paletteRgb[i * 3 + 0])
+            val g = linearToSrgbChannel(paletteRgb[i * 3 + 1])
+            val b = linearToSrgbChannel(paletteRgb[i * 3 + 2])
+            val ri = (r * 255f + 0.5f).toInt().coerceIn(0, 255)
+            val gi = (g * 255f + 0.5f).toInt().coerceIn(0, 255)
+            val bi = (b * 255f + 0.5f).toInt().coerceIn(0, 255)
+            codes += String.format(Locale.US, "#%02X%02X%02X", ri, gi, bi)
         }
         return codes
+    }
+
+    private fun linearToSrgbChannel(v: Float): Float {
+        val clamped = v.coerceIn(0f, 1f)
+        return if (clamped <= 0.0031308f) {
+            12.92f * clamped
+        } else {
+            (1.055f * Math.pow(clamped.toDouble(), 1.0 / 2.4).toFloat()) - 0.055f
+        }
     }
 }

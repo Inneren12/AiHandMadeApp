@@ -148,7 +148,7 @@ object RunFull {
             )
         )
         val out = ImageOps.packToF16(merged, src.width, src.height)
-        Logger.i("RUN", "done", mapOf("ms" to 0, "memMB" to 0, "tiles" to tiles))
+        Logger.i("RUN", "done", mapOf("ms" to 0, "memMB" to 0, "tile.count" to tiles))
         return RunResult(out, verify)
     }
 }

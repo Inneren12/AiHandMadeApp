@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
@@ -17,7 +18,6 @@ import com.appforcross.editor.logging.Logger
 import com.appforcross.editor.export.LegendBuilder
 import com.appforcross.editor.export.PatternLayout
 import com.appforcross.editor.export.PdfExporter
-import com.appforcross.editor.prescale.PreScaleOrchestrator
 import com.appforcross.editor.scene.SceneAnalyzer
 import com.appforcross.editor.scene.SceneDecision
 import com.appforcross.editor.scene.SceneKind
@@ -32,6 +32,7 @@ import java.util.Locale
 class MainActivity : Activity(), PreviewController.Listener {
 
     private lateinit var controller: PreviewController
+    private val preScaleWorker = PreScaleWorker()
     private lateinit var previewImage: ImageView
     private lateinit var infoText: TextView
     private lateinit var detectedText: TextView
@@ -46,6 +47,7 @@ class MainActivity : Activity(), PreviewController.Listener {
 
     private var lastSceneDecision: SceneDecision? = null
     private var forceLargerWst: Boolean = false
+    private var preScaleRequestSeq: Long = 0
 
     private var currentBitmap: Bitmap? = null
 
@@ -144,6 +146,7 @@ class MainActivity : Activity(), PreviewController.Listener {
     override fun onDestroy() {
         previewImage.setImageDrawable(null)
         controller.dispose()
+        preScaleWorker.dispose()
         currentBitmap?.takeIf { !it.isRecycled }?.recycle()
         currentBitmap = null
         super.onDestroy()
@@ -248,6 +251,7 @@ class MainActivity : Activity(), PreviewController.Listener {
             preScaleText.text = getString(R.string.prescale_placeholder)
             btnRecalcLarger.visibility = View.GONE
             forceLargerWst = false
+            preScaleRequestSeq++
             return
         }
         if (kind != SceneKind.PHOTO) {
@@ -255,6 +259,7 @@ class MainActivity : Activity(), PreviewController.Listener {
             preScaleText.text = getString(R.string.prescale_placeholder)
             btnRecalcLarger.visibility = View.GONE
             forceLargerWst = false
+            preScaleRequestSeq++
             return
         }
         val rgb = lastPreviewRgb
@@ -264,53 +269,66 @@ class MainActivity : Activity(), PreviewController.Listener {
             preScaleText.text = getString(R.string.prescale_placeholder)
             btnRecalcLarger.visibility = View.GONE
             forceLargerWst = false
+            preScaleRequestSeq++
             return
         }
-        val report = PreScaleOrchestrator.run(rgb, w, h, forceLargerWst)
+        val requestId = ++preScaleRequestSeq
+        val useLargerWst = forceLargerWst
         forceLargerWst = false
-        presetText.text = try {
-            getString(R.string.preset_label, report.presetId, report.presetConfidence.toDouble())
-        } catch (_: Throwable) {
-            "Preset: ${report.presetId}  (conf ${String.format(Locale.US, "%.2f", report.presetConfidence)})"
+        presetText.text = getString(R.string.preset_placeholder)
+        preScaleText.text = getString(R.string.prescale_placeholder)
+        btnRecalcLarger.visibility = View.GONE
+        preScaleWorker.run(rgb, w, h, useLargerWst) { report ->
+            runOnUiThread {
+                if (requestId != preScaleRequestSeq) return@runOnUiThread
+                if (isFinishing || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1 && isDestroyed)) {
+                    return@runOnUiThread
+                }
+                presetText.text = try {
+                    getString(R.string.preset_label, report.presetId, report.presetConfidence.toDouble())
+                } catch (_: Throwable) {
+                    "Preset: ${report.presetId}  (conf ${String.format(Locale.US, "%.2f", report.presetConfidence)})"
+                }
+                Logger.i(
+                    "UI",
+                    "preset",
+                    mapOf(
+                        "id" to report.presetId,
+                        "confidence" to String.format(Locale.US, "%.3f", report.presetConfidence),
+                        "frPass" to report.frPass
+                    )
+                )
+                preScaleText.text = try {
+                    getString(
+                        R.string.prescale_label,
+                        report.wst,
+                        report.sigma.toDouble(),
+                        report.phaseDx,
+                        report.phaseDy,
+                        report.filter,
+                        report.ssimProxy.toDouble(),
+                        report.edgeKeep.toDouble(),
+                        report.bandIdx.toDouble(),
+                        report.deltaE95.toDouble()
+                    )
+                } catch (_: Throwable) {
+                    String.format(
+                        Locale.US,
+                        "PreScale: Wst=%d σ=%.2f phase=%d,%d filter=%s SSIM=%.3f Edge=%.3f Band=%.3f ΔE95=%.2f",
+                        report.wst,
+                        report.sigma,
+                        report.phaseDx,
+                        report.phaseDy,
+                        report.filter,
+                        report.ssimProxy,
+                        report.edgeKeep,
+                        report.bandIdx,
+                        report.deltaE95
+                    )
+                }
+                btnRecalcLarger.visibility = if (report.frPass) View.GONE else View.VISIBLE
+            }
         }
-        Logger.i(
-            "UI",
-            "preset",
-            mapOf(
-                "id" to report.presetId,
-                "confidence" to String.format(Locale.US, "%.3f", report.presetConfidence),
-                "frPass" to report.frPass
-            )
-        )
-        preScaleText.text = try {
-            getString(
-                R.string.prescale_label,
-                report.wst,
-                report.sigma.toDouble(),
-                report.phaseDx,
-                report.phaseDy,
-                report.filter,
-                report.ssimProxy.toDouble(),
-                report.edgeKeep.toDouble(),
-                report.bandIdx.toDouble(),
-                report.deltaE95.toDouble()
-            )
-        } catch (_: Throwable) {
-            String.format(
-                Locale.US,
-                "PreScale: Wst=%d σ=%.2f phase=%d,%d filter=%s SSIM=%.3f Edge=%.3f Band=%.3f ΔE95=%.2f",
-                report.wst,
-                report.sigma,
-                report.phaseDx,
-                report.phaseDy,
-                report.filter,
-                report.ssimProxy,
-                report.edgeKeep,
-                report.bandIdx,
-                report.deltaE95
-            )
-        }
-        btnRecalcLarger.visibility = if (report.frPass) View.GONE else View.VISIBLE
     }
 
     companion object {

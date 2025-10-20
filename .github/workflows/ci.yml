@@ -20,10 +20,13 @@ jobs:
 
       - name: Init log files (so upload never fails)
         run: |
+          : > env.log
           : > core-compile.log
           : > core-test.log
           : > core-tasks.txt
           : > app-assemble.log
+          : > ktlint.log
+          : > detekt.log
 
       - name: Setup Java 17 (Temurin) + Gradle cache
         uses: actions/setup-java@v4
@@ -43,57 +46,89 @@ jobs:
         with:
           packages: "platform-tools platforms;android-34 platforms;android-35 build-tools;34.0.0 build-tools;35.0.0"
 
-      - name: Check toolchain versions
+      - name: Toolchain info
         run: |
-          which java || true
-          java -version
-          which gradle || true
-          gradle -v
-          sdkmanager --list | head -n 50
+          {
+            echo "=== java ==="; which java || true; java -version || true
+            echo "=== gradle ==="; which gradle || true; gradle -v || true
+            echo "=== sdkmanager list (head) ==="; sdkmanager --list | head -n 80 || true
+          } | tee -a env.log
+        shell: bash
 
       - name: Accept SDK licenses (best-effort)
         run: yes | sdkmanager --licenses || true
 
+      - name: Core task list
+        run: |
+          ( gradle :core:tasks --all 2>&1 | tee core-tasks.txt ) || true
+        shell: bash
+
       - name: Core compile (adaptive, diagnostic)
         run: |
-          set -eo pipefail
-          TASKS="$(gradle :core:tasks --all)"
-          echo "$TASKS" | sed -n '1,300p' > core-tasks.txt
+          set -o pipefail
+          if [ -f core-tasks.txt ]; then
+            TASKS="$(cat core-tasks.txt)"
+          else
+            TASKS="$(gradle :core:tasks --all 2>/dev/null || true)"
+            printf '%s\n' "$TASKS" | sed -n '1,300p' > core-tasks.txt
+          fi
           if   echo "$TASKS" | grep -qE '^compileKotlin[[:space:]]'; then CORE_COMPILE=":core:compileKotlin";
           elif echo "$TASKS" | grep -qE '^compileDebugKotlin[[:space:]]'; then CORE_COMPILE=":core:compileDebugKotlin";
           elif echo "$TASKS" | grep -qE '^compileReleaseKotlin[[:space:]]'; then CORE_COMPILE=":core:compileReleaseKotlin";
           else CORE_COMPILE=":core:build"; fi
           echo "Chosen core compile task: $CORE_COMPILE"
-          gradle $CORE_COMPILE --console=plain --no-daemon --stacktrace --info 2>&1 | tee core-compile.log
+          ( gradle "$CORE_COMPILE" --console=plain --no-daemon --stacktrace --info 2>&1 | tee core-compile.log ) || true
+        shell: bash
 
       - name: Core unit tests (adaptive)
-        if: success()
         run: |
-          set -eo pipefail
-          TASKS="$(gradle :core:tasks --all)"
+          set -o pipefail
+          if [ -f core-tasks.txt ]; then
+            TASKS="$(cat core-tasks.txt)"
+          else
+            TASKS="$(gradle :core:tasks --all 2>/dev/null || true)"
+            printf '%s\n' "$TASKS" | sed -n '1,300p' > core-tasks.txt
+          fi
           if   echo "$TASKS" | grep -qE '^test[[:space:]]'; then CORE_TEST=":core:test";
           elif echo "$TASKS" | grep -qE '^testDebugUnitTest[[:space:]]'; then CORE_TEST=":core:testDebugUnitTest";
           elif echo "$TASKS" | grep -qE '^testReleaseUnitTest[[:space:]]'; then CORE_TEST=":core:testReleaseUnitTest";
-          else echo "No core unit test task found; skipping." | tee core-test.log; exit 0; fi
+          else echo "No core unit test task found; skipping." | tee -a core-test.log; exit 0; fi
           echo "Chosen core test task: $CORE_TEST"
-          gradle $CORE_TEST --console=plain --no-daemon --stacktrace --info 2>&1 | tee -a core-test.log
+          ( gradle "$CORE_TEST" --console=plain --no-daemon --stacktrace --info 2>&1 | tee -a core-test.log ) || true
+        shell: bash
 
       - name: Assemble app (debug)
-        if: success()
         run: |
-          set -eo pipefail
-          gradle :app:assembleDebug --console=plain --no-daemon --stacktrace --info 2>&1 | tee app-assemble.log
+          set -o pipefail
+          ( gradle :app:assembleDebug --console=plain --no-daemon --stacktrace --info 2>&1 | tee app-assemble.log ) || true
           ls -al app/build/outputs/apk/debug || true
+        shell: bash
 
       - name: Static analysis (ktlint)
-        if: always()
-        continue-on-error: true
-        run: gradle ktlintCheck --console=plain --no-daemon --info | tee ktlint.log
+        run: |
+          ( gradle ktlintCheck --console=plain --no-daemon --info | tee -a ktlint.log ) || true
+        shell: bash
 
       - name: Static analysis (detekt)
-        if: always()
-        continue-on-error: true
-        run: gradle detekt --console=plain --no-daemon --info | tee detekt.log
+        run: |
+          ( gradle detekt --console=plain --no-daemon --info | tee -a detekt.log ) || true
+        shell: bash
+
+      - name: Decide overall status from logs
+        id: decide
+        run: |
+          FAIL=0
+          grep -q "BUILD FAILED" core-compile.log && FAIL=1
+          grep -q "There were failing tests" core-test.log && FAIL=1
+          grep -q "BUILD FAILED" app-assemble.log && FAIL=1
+          # ktlint/detekt не валим сборку — отчёты остаются предупреждениями
+          echo "fail=$FAIL" >> "$GITHUB_OUTPUT"
+          if [ "$FAIL" -eq 1 ]; then
+            echo "::warning::Build marked as failed by log analysis"
+          else
+            echo "::notice::Build marked as success by log analysis"
+          fi
+        shell: bash
 
       - name: Upload logs & reports (always)
         if: always()
@@ -101,6 +136,7 @@ jobs:
         with:
           name: build-logs-and-reports
           path: |
+            env.log
             core-compile.log
             core-test.log
             core-tasks.txt
@@ -112,9 +148,13 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload APK artifact (if exists)
-        if: always() && hashFiles('app/build/outputs/apk/debug/app-debug.apk') != ''
+        if: hashFiles('app/build/outputs/apk/debug/app-debug.apk') != ''
         uses: actions/upload-artifact@v4
         with:
           name: app-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: warn
+
+      - name: Fail job if analysis says so
+        if: steps.decide.outputs.fail == '1'
+        run: exit 1

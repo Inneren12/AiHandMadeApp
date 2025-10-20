@@ -4,15 +4,6 @@ plugins {
     id("org.jlleitschuh.gradle.ktlint")
 }
 
-// Диагностика ресурсов: покажем, что копирует processResources
-tasks.named<org.gradle.language.jvm.tasks.ProcessResources>("processResources") {
-    doFirst {
-        println("[core:processResources] from=" + from.files.joinToString())
-        println("[core:processResources] includes=" + includes)
-        println("[core:processResources] excludes=" + excludes)
-    }
-}
-
 kotlin {
     jvmToolchain(17)
     sourceSets {

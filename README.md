@@ -1,6 +1,8 @@
 # AiHandMadeApp (PHOTO v1)
 
-**Stack**: Gradle 8.13, JDK 17, Android SDK 34.  
+![CI](https://github.com/Inneren12/AiHandMadeApp/actions/workflows/ci.yml/badge.svg)
+
+**Stack**: Gradle 8.13, JDK 17, Android SDK 34.
 **Modules**: `app/` (UI), `core/` (pipeline).
 
 ## Build

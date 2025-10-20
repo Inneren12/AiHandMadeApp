@@ -71,6 +71,16 @@ jobs:
           set -eo pipefail
           gradle :app:assembleDebug --console=plain --no-daemon --stacktrace --info 2>&1 | tee app-assemble.log
 
+      - name: Static analysis (ktlint)
+        if: always()
+        continue-on-error: true
+        run: gradle ktlintCheck --console=plain --no-daemon
+
+      - name: Static analysis (detekt)
+        if: always()
+        continue-on-error: true
+        run: gradle detekt --console=plain --no-daemon
+
       - name: Upload logs & reports (always)
         if: always()
         uses: actions/upload-artifact@v4

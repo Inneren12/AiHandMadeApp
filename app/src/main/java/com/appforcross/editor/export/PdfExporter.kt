@@ -16,6 +16,7 @@ object PdfExporter {
         val cellPt: Int = 12
     )
 
+    @Suppress("LongMethod", "NestedBlockDepth")
     fun export(context: Context, uri: Uri, bundle: LayoutBundle, legend: Legend, params: PdfParams = PdfParams()) {
         Logger.i(
             "EXPORT",

@@ -1,5 +1,7 @@
 plugins {
     id("org.jetbrains.kotlin.jvm")
+    id("io.gitlab.arturbosch.detekt")
+    id("org.jlleitschuh.gradle.ktlint")
 }
 
 kotlin {
@@ -15,6 +17,15 @@ kotlin {
 dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:2.0.20")
+}
+
+detekt {
+    buildUponDefaultConfig = true
+    allRules = false
+}
+
+ktlint {
+    android.set(false)
 }
 
 tasks.test {

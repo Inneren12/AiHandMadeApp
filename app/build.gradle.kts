@@ -1,6 +1,8 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("io.gitlab.arturbosch.detekt")
+    id("org.jlleitschuh.gradle.ktlint")
 }
 
 android {
@@ -42,4 +44,13 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     // Подключаем общий код (Logger, Scene*, и пр.) из :core
     implementation(project(":core"))
+}
+
+detekt {
+    buildUponDefaultConfig = true
+    allRules = false
+}
+
+ktlint {
+    android.set(true)
 }

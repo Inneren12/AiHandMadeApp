@@ -43,10 +43,16 @@ jobs:
         with:
           packages: "platform-tools platforms;android-34 platforms;android-35 build-tools;34.0.0 build-tools;35.0.0"
 
-      - name: Show versions
+      - name: Check toolchain versions
         run: |
+          which java || true
+          java -version
+          which gradle || true
           gradle -v
           sdkmanager --list | head -n 50
+
+      - name: Accept SDK licenses (best-effort)
+        run: yes | sdkmanager --licenses || true
 
       - name: Core compile (adaptive, diagnostic)
         run: |
@@ -82,12 +88,12 @@ jobs:
       - name: Static analysis (ktlint)
         if: always()
         continue-on-error: true
-        run: gradle ktlintCheck --console=plain --no-daemon
+        run: gradle ktlintCheck --console=plain --no-daemon --info | tee ktlint.log
 
       - name: Static analysis (detekt)
         if: always()
         continue-on-error: true
-        run: gradle detekt --console=plain --no-daemon
+        run: gradle detekt --console=plain --no-daemon --info | tee detekt.log
 
       - name: Upload logs & reports (always)
         if: always()
@@ -99,6 +105,8 @@ jobs:
             core-test.log
             core-tasks.txt
             app-assemble.log
+            ktlint.log
+            detekt.log
             core/build/reports/**
             app/build/reports/**
           if-no-files-found: warn

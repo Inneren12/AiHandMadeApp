@@ -127,5 +127,12 @@
             android:layout_marginTop="12dp"
             android:text="@string/process_as_photo"
             android:visibility="gone" />
+
+        <Button
+            android:id="@+id/btnExportPdf"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/export_pdf" />
     </LinearLayout>
 </ScrollView>

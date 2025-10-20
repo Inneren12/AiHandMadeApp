@@ -28,6 +28,7 @@ import com.appforcross.editor.palette.TopologyParams
 import com.appforcross.editor.palette.dither.DitherParams
 import com.appforcross.editor.palette.dither.OrderedDither
 import java.util.Locale
+import kotlin.collections.HashSet
 
 class MainActivity : Activity(), PreviewController.Listener {
 
@@ -38,9 +39,11 @@ class MainActivity : Activity(), PreviewController.Listener {
     private lateinit var detectedText: TextView
     private lateinit var presetText: TextView
     private lateinit var preScaleText: TextView
+    private lateinit var colorsText: TextView
     private lateinit var btnRecalcLarger: Button
     private lateinit var btnProcessAsPhoto: Button
     private lateinit var btnExportPdf: Button
+    private lateinit var seekK: SeekBar
     private lateinit var rbPhoto: RadioButton
     private lateinit var rbDiscrete: RadioButton
     private lateinit var overrideGroup: RadioGroup
@@ -64,6 +67,7 @@ class MainActivity : Activity(), PreviewController.Listener {
         detectedText = findViewById(R.id.detectedText)
         presetText = findViewById(R.id.tvPreset)
         preScaleText = findViewById(R.id.tvPreScale)
+        colorsText = findViewById(R.id.tvColors)
         btnRecalcLarger = findViewById(R.id.btnRecalcLarger)
         btnProcessAsPhoto = findViewById(R.id.btnProcessAsPhoto)
         btnExportPdf = findViewById(R.id.btnExportPdf)
@@ -92,7 +96,7 @@ class MainActivity : Activity(), PreviewController.Listener {
             override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
         })
 
-        val seekK = findViewById<SeekBar>(R.id.seekK)
+        seekK = findViewById(R.id.seekK)
         val tvKVal = findViewById<TextView>(R.id.tvKVal)
         seekK.max = 64
         seekK.progress = 0
@@ -141,6 +145,7 @@ class MainActivity : Activity(), PreviewController.Listener {
         infoText.text = getString(R.string.info_placeholder)
         presetText.text = getString(R.string.preset_placeholder)
         preScaleText.text = getString(R.string.prescale_placeholder)
+        colorsText.text = getString(R.string.colors_label, 0)
     }
 
     override fun onDestroy() {
@@ -249,6 +254,7 @@ class MainActivity : Activity(), PreviewController.Listener {
         if (decision == null) {
             presetText.text = getString(R.string.preset_placeholder)
             preScaleText.text = getString(R.string.prescale_placeholder)
+            colorsText.text = getString(R.string.colors_label, 0)
             btnRecalcLarger.visibility = View.GONE
             forceLargerWst = false
             preScaleRequestSeq++
@@ -257,6 +263,7 @@ class MainActivity : Activity(), PreviewController.Listener {
         if (kind != SceneKind.PHOTO) {
             presetText.text = getString(R.string.preset_placeholder)
             preScaleText.text = getString(R.string.prescale_placeholder)
+            colorsText.text = getString(R.string.colors_label, 0)
             btnRecalcLarger.visibility = View.GONE
             forceLargerWst = false
             preScaleRequestSeq++
@@ -267,6 +274,7 @@ class MainActivity : Activity(), PreviewController.Listener {
         val h = lastPreviewHeight
         if (rgb == null || w <= 0 || h <= 0) {
             preScaleText.text = getString(R.string.prescale_placeholder)
+            colorsText.text = getString(R.string.colors_label, 0)
             btnRecalcLarger.visibility = View.GONE
             forceLargerWst = false
             preScaleRequestSeq++
@@ -277,6 +285,7 @@ class MainActivity : Activity(), PreviewController.Listener {
         forceLargerWst = false
         presetText.text = getString(R.string.preset_placeholder)
         preScaleText.text = getString(R.string.prescale_placeholder)
+        colorsText.text = getString(R.string.colors_label, 0)
         btnRecalcLarger.visibility = View.GONE
         preScaleWorker.run(rgb, w, h, useLargerWst) { report ->
             runOnUiThread {
@@ -329,8 +338,39 @@ class MainActivity : Activity(), PreviewController.Listener {
                     )
                 }
                 btnRecalcLarger.visibility = if (report.frPass) View.GONE else View.VISIBLE
+                val kSelected = seekK.progress
+                val kDisplay = if (kSelected > 0) {
+                    kSelected
+                } else {
+                    estimateK5bit(rgb, w, h).coerceAtLeast(1)
+                }
+                try {
+                    colorsText.text = getString(R.string.colors_label, kDisplay)
+                } catch (_: Throwable) {
+                    colorsText.text = "Colors: $kDisplay"
+                }
+                Logger.i("UI", "colors", mapOf("K" to kDisplay))
             }
         }
+    }
+
+    /** Грубая оценка K: считаем число уникальных цветов после 5-бит квантизации RGB. */
+    private fun estimateK5bit(rgb: FloatArray, w: Int, h: Int): Int {
+        val seen = HashSet<Int>(256)
+        var p = 0
+        val total = w * h
+        for (i in 0 until total) {
+            val r = (rgb[p].coerceIn(0f, 1f) * 31f).toInt()
+            val g = (rgb[p + 1].coerceIn(0f, 1f) * 31f).toInt()
+            val b = (rgb[p + 2].coerceIn(0f, 1f) * 31f).toInt()
+            val key = (r shl 10) or (g shl 5) or b
+            seen.add(key)
+            p += 3
+            if (seen.size > 512) {
+                break
+            }
+        }
+        return seen.size
     }
 
     companion object {

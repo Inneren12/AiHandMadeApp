@@ -53,6 +53,14 @@
             android:paddingTop="4dp"
             android:text="@string/prescale_placeholder" />
 
+        <!-- Количество цветов после маппинга (K) -->
+        <TextView
+            android:id="@+id/tvColors"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingBottom="8dp"
+            android:text="@string/colors_label" />
+
         <Button
             android:id="@+id/btnRecalcLarger"
             android:layout_width="match_parent"

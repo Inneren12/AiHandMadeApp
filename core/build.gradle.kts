@@ -9,12 +9,12 @@ kotlin {
     sourceSets {
         val main by getting {
             // Стандартные JVM-ресурсы
-            resources.srcDirs("src/main/resources")
+            resources.srcDirs("src/main/resources", "src/main/RES")
         }
         val test by getting {
             kotlin.srcDirs("src/test/kotlin", "src/test/java")
             // Стандартные тестовые ресурсы
-            resources.srcDirs("src/test/resources")
+            resources.srcDirs("src/test/resources", "src/test/RES")
         }
     }
 }

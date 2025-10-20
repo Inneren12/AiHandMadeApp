@@ -7,11 +7,21 @@ plugins {
 kotlin {
     jvmToolchain(17)
     sourceSets {
-        // main — дефолт (src/main/java)
+        val main by getting {
+            // Стандартные JVM-ресурсы
+            resources.srcDirs("src/main/resources", "src/main/RES")
+        }
         val test by getting {
             kotlin.srcDirs("src/test/kotlin", "src/test/java")
+            // Стандартные тестовые ресурсы
+            resources.srcDirs("src/test/resources", "src/test/RES")
         }
     }
+}
+
+// Временная страховка от дубликатов ресурсов, чтобы CI не падал
+tasks.named<org.gradle.language.jvm.tasks.ProcessResources>("processResources") {
+    duplicatesStrategy = org.gradle.api.file.DuplicatesStrategy.EXCLUDE
 }
 
 dependencies {

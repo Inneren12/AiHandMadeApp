@@ -14,6 +14,9 @@ import android.widget.SeekBar
 import android.widget.TextView
 import com.appforcross.editor.R
 import com.appforcross.editor.logging.Logger
+import com.appforcross.editor.export.LegendBuilder
+import com.appforcross.editor.export.PatternLayout
+import com.appforcross.editor.export.PdfExporter
 import com.appforcross.editor.prescale.BuildSpec
 import com.appforcross.editor.prescale.ImageOps
 import com.appforcross.editor.prescale.RunFull
@@ -32,6 +35,7 @@ class MainActivity : Activity(), PreviewController.Listener {
     private lateinit var presetText: TextView
     private lateinit var preScaleText: TextView
     private lateinit var btnProcessAsPhoto: Button
+    private lateinit var btnExportPdf: Button
     private lateinit var rbPhoto: RadioButton
     private lateinit var rbDiscrete: RadioButton
     private lateinit var overrideGroup: RadioGroup
@@ -54,6 +58,7 @@ class MainActivity : Activity(), PreviewController.Listener {
         presetText = findViewById(R.id.tvPreset)
         preScaleText = findViewById(R.id.tvPreScale)
         btnProcessAsPhoto = findViewById(R.id.btnProcessAsPhoto)
+        btnExportPdf = findViewById(R.id.btnExportPdf)
         rbPhoto = findViewById(R.id.rbPhoto)
         rbDiscrete = findViewById(R.id.rbDiscrete)
         overrideGroup = findViewById(R.id.overrideGroup)
@@ -115,6 +120,9 @@ class MainActivity : Activity(), PreviewController.Listener {
             renderDetected(SceneKind.PHOTO, 1f, via = "override-button")
         }
 
+        btnExportPdf.isEnabled = false
+        btnExportPdf.setOnClickListener { exportPdfFlow() }
+
         detectedText.text = getString(R.string.detected_placeholder)
         infoText.text = getString(R.string.info_placeholder)
         presetText.text = getString(R.string.preset_placeholder)
@@ -142,6 +150,9 @@ class MainActivity : Activity(), PreviewController.Listener {
         if (requestCode == REQ_PICK && resultCode == RESULT_OK) {
             val uri: Uri = data?.data ?: return
             contentResolver.openInputStream(uri)?.use { stream -> controller.setSourceFromStream(stream) }
+        } else if (requestCode == REQ_EXPORT && resultCode == RESULT_OK) {
+            val uri: Uri = data?.data ?: return
+            performExport(uri)
         }
     }
 
@@ -163,6 +174,7 @@ class MainActivity : Activity(), PreviewController.Listener {
             lastPreviewRgb = null
             lastPreviewWidth = 0
             lastPreviewHeight = 0
+            btnExportPdf.isEnabled = false
             return
         }
         val pixels = IntArray(w * h)
@@ -184,6 +196,7 @@ class MainActivity : Activity(), PreviewController.Listener {
         lastSceneDecision = decision
         val forced = manualOverride()
         renderDetected(forced ?: decision.kind, if (forced == null) decision.confidence else 1f, via)
+        btnExportPdf.isEnabled = true
     }
 
     private fun manualOverride(): SceneKind? = when (overrideGroup.checkedRadioButtonId) {
@@ -289,5 +302,92 @@ class MainActivity : Activity(), PreviewController.Listener {
 
     companion object {
         private const val REQ_PICK = 1001
+        private const val REQ_EXPORT = 1002
+        private const val EXPORT_COLORS = 12
+        private const val EXPORT_GRID = 50
+        private const val EXPORT_OVERLAP = 3
+    }
+
+    private fun exportPdfFlow() {
+        if (lastPreviewRgb == null || lastPreviewWidth <= 0 || lastPreviewHeight <= 0) {
+            Logger.e("EXPORT", "fatal", mapOf("stage" to "ui.export", "reason" to "preview_missing"))
+            return
+        }
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "application/pdf"
+            putExtra(Intent.EXTRA_TITLE, "pattern.pdf")
+        }
+        startActivityForResult(intent, REQ_EXPORT)
+    }
+
+    private fun performExport(uri: Uri) {
+        val rgb = lastPreviewRgb ?: return
+        val width = lastPreviewWidth
+        val height = lastPreviewHeight
+        if (width <= 0 || height <= 0) {
+            Logger.e("EXPORT", "fatal", mapOf("stage" to "ui.export", "reason" to "invalid_dimensions"))
+            return
+        }
+        val colors = EXPORT_COLORS.coerceAtLeast(1)
+        Logger.i(
+            "EXPORT",
+            "params",
+            mapOf(
+                "stage" to "ui.export",
+                "width" to width,
+                "height" to height,
+                "colors" to colors,
+                "gridW" to EXPORT_GRID,
+                "gridH" to EXPORT_GRID,
+                "tile.overlap" to EXPORT_OVERLAP
+            )
+        )
+        val index = naiveAssign(rgb, width, height, colors)
+        val paletteCodes = generatePaletteCodes(colors)
+        val legend = LegendBuilder.build(paletteCodes)
+        val bundle = PatternLayout.paginate(
+            index,
+            width,
+            height,
+            gridW = EXPORT_GRID,
+            gridH = EXPORT_GRID,
+            overlap = EXPORT_OVERLAP,
+            boldEvery = 10
+        )
+        PdfExporter.export(this, uri, bundle, legend)
+        Logger.i(
+            "EXPORT",
+            "done",
+            mapOf(
+                "stage" to "ui.export",
+                "pages" to bundle.pages.size
+            )
+        )
+    }
+
+    /** Простейшая квантовка: делим диапазон яркости на K уровней. */
+    private fun naiveAssign(rgb: FloatArray, width: Int, height: Int, colors: Int): IntArray {
+        val total = width * height
+        val result = IntArray(total)
+        val maxIndex = (colors - 1).coerceAtLeast(0)
+        var p = 0
+        for (i in 0 until total) {
+            val l = 0.2126f * rgb[p] + 0.7152f * rgb[p + 1] + 0.0722f * rgb[p + 2]
+            val scaled = (l.coerceIn(0f, 1f) * maxIndex + 0.5f).toInt()
+            result[i] = scaled.coerceIn(0, maxIndex)
+            p += 3
+        }
+        return result
+    }
+
+    private fun generatePaletteCodes(colors: Int): List<String> {
+        if (colors <= 1) return listOf("#000000")
+        val codes = ArrayList<String>(colors)
+        for (i in 0 until colors) {
+            val shade = (255f * i / (colors - 1)).toInt().coerceIn(0, 255)
+            codes += String.format(Locale.US, "#%02X%02X%02X", shade, shade, shade)
+        }
+        return codes
     }
 }

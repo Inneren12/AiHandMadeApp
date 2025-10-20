@@ -18,6 +18,7 @@
     <string name="quant_off">K=off</string>
     <string name="quant_template">K=%1$d</string>
     <string name="process_as_photo">Process as PHOTO</string>
+    <string name="export_pdf">Export PDF</string>
     <!-- %1$s = preset id, %2$.2f = confidence -->
     <string name="preset_label">Preset: %1$s  (conf %2$.2f)</string>
     <string name="prescale_placeholder">PreScale: —</string>

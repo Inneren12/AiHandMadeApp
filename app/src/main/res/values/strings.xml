@@ -22,6 +22,7 @@
     <!-- %1$s = preset id, %2$.2f = confidence -->
     <string name="preset_label">Preset: %1$s  (conf %2$.2f)</string>
     <string name="prescale_placeholder">PreScale: —</string>
-    <!-- %1$d=Wst, %2$.2f=sigma, %3$d=phase.dx, %4$d=phase.dy, %5$s=filter, %6$.3f=SSIM, %7$.3f=Edge, %8$.3f=Band -->
-    <string name="prescale_label">PreScale: Wst=%1$d σ=%2$.2f phase=%3$d,%4$d filter=%5$s SSIM=%6$.3f Edge=%7$.3f Band=%8$.3f</string>
+    <!-- %1$d=Wst, %2$.2f=sigma, %3$d=phase.dx, %4$d=phase.dy, %5$s=filter, %6$.3f=SSIM, %7$.3f=Edge, %8$.3f=Band, %9$.2f=ΔE95 -->
+    <string name="prescale_label">PreScale: Wst=%1$d σ=%2$.2f phase=%3$d,%4$d filter=%5$s SSIM=%6$.3f Edge=%7$.3f Band=%8$.3f ΔE95=%9$.2f</string>
+    <string name="prescale_recalc_larger">Recalculate with larger Wst</string>
 </resources>

@@ -17,13 +17,10 @@ import com.appforcross.editor.logging.Logger
 import com.appforcross.editor.export.LegendBuilder
 import com.appforcross.editor.export.PatternLayout
 import com.appforcross.editor.export.PdfExporter
-import com.appforcross.editor.prescale.BuildSpec
-import com.appforcross.editor.prescale.ImageOps
-import com.appforcross.editor.prescale.RunFull
+import com.appforcross.editor.prescale.PreScaleOrchestrator
 import com.appforcross.editor.scene.SceneAnalyzer
 import com.appforcross.editor.scene.SceneDecision
 import com.appforcross.editor.scene.SceneKind
-import com.appforcross.editor.scene.ScenePresetHook
 import java.util.Locale
 
 class MainActivity : Activity(), PreviewController.Listener {
@@ -34,6 +31,7 @@ class MainActivity : Activity(), PreviewController.Listener {
     private lateinit var detectedText: TextView
     private lateinit var presetText: TextView
     private lateinit var preScaleText: TextView
+    private lateinit var btnRecalcLarger: Button
     private lateinit var btnProcessAsPhoto: Button
     private lateinit var btnExportPdf: Button
     private lateinit var rbPhoto: RadioButton
@@ -41,6 +39,7 @@ class MainActivity : Activity(), PreviewController.Listener {
     private lateinit var overrideGroup: RadioGroup
 
     private var lastSceneDecision: SceneDecision? = null
+    private var forceLargerWst: Boolean = false
 
     private var currentBitmap: Bitmap? = null
 
@@ -57,6 +56,7 @@ class MainActivity : Activity(), PreviewController.Listener {
         detectedText = findViewById(R.id.detectedText)
         presetText = findViewById(R.id.tvPreset)
         preScaleText = findViewById(R.id.tvPreScale)
+        btnRecalcLarger = findViewById(R.id.btnRecalcLarger)
         btnProcessAsPhoto = findViewById(R.id.btnProcessAsPhoto)
         btnExportPdf = findViewById(R.id.btnExportPdf)
         rbPhoto = findViewById(R.id.rbPhoto)
@@ -122,6 +122,12 @@ class MainActivity : Activity(), PreviewController.Listener {
 
         btnExportPdf.isEnabled = false
         btnExportPdf.setOnClickListener { exportPdfFlow() }
+
+        btnRecalcLarger.visibility = View.GONE
+        btnRecalcLarger.setOnClickListener {
+            forceLargerWst = true
+            renderPreset(SceneKind.PHOTO)
+        }
 
         detectedText.text = getString(R.string.detected_placeholder)
         infoText.text = getString(R.string.info_placeholder)
@@ -234,70 +240,71 @@ class MainActivity : Activity(), PreviewController.Listener {
         if (decision == null) {
             presetText.text = getString(R.string.preset_placeholder)
             preScaleText.text = getString(R.string.prescale_placeholder)
+            btnRecalcLarger.visibility = View.GONE
+            forceLargerWst = false
             return
         }
         if (kind != SceneKind.PHOTO) {
             presetText.text = getString(R.string.preset_placeholder)
             preScaleText.text = getString(R.string.prescale_placeholder)
+            btnRecalcLarger.visibility = View.GONE
+            forceLargerWst = false
             return
         }
-        val presetDecision = ScenePresetHook.decideForFoto(decision.features)
-        presetText.text = try {
-            getString(
-                R.string.preset_label,
-                presetDecision.preset.id,
-                presetDecision.confidence.toDouble()
-            )
-        } catch (_: Throwable) {
-            "Preset: ${presetDecision.preset.id}  (conf ${String.format(Locale.US, "%.2f", presetDecision.confidence)})"
-        }
-        Logger.i(
-            "UI",
-            "preset",
-            mapOf(
-                "id" to presetDecision.preset.id,
-                "confidence" to String.format(Locale.US, "%.3f", presetDecision.confidence)
-            )
-        )
         val rgb = lastPreviewRgb
         val w = lastPreviewWidth
         val h = lastPreviewHeight
         if (rgb == null || w <= 0 || h <= 0) {
             preScaleText.text = getString(R.string.prescale_placeholder)
+            btnRecalcLarger.visibility = View.GONE
+            forceLargerWst = false
             return
         }
-        val luminance = FloatArray(w * h) { index ->
-            val p = index * 3
-            0.2126f * rgb[p] + 0.7152f * rgb[p + 1] + 0.0722f * rgb[p + 2]
+        val report = PreScaleOrchestrator.run(rgb, w, h, forceLargerWst)
+        forceLargerWst = false
+        presetText.text = try {
+            getString(R.string.preset_label, report.presetId, report.presetConfidence.toDouble())
+        } catch (_: Throwable) {
+            "Preset: ${report.presetId}  (conf ${String.format(Locale.US, "%.2f", report.presetConfidence)})"
         }
-        val buildDecision = BuildSpec.decide(w, h, luminance)
-        val verify = RunFull.run(ImageOps.packToF16(rgb, w, h), buildDecision).verify
+        Logger.i(
+            "UI",
+            "preset",
+            mapOf(
+                "id" to report.presetId,
+                "confidence" to String.format(Locale.US, "%.3f", report.presetConfidence),
+                "frPass" to report.frPass
+            )
+        )
         preScaleText.text = try {
             getString(
                 R.string.prescale_label,
-                buildDecision.wst,
-                buildDecision.sigma.toDouble(),
-                buildDecision.phase.dx,
-                buildDecision.phase.dy,
-                buildDecision.filter,
-                verify.ssimProxy.toDouble(),
-                verify.edgeKeep.toDouble(),
-                verify.bandIdx.toDouble()
+                report.wst,
+                report.sigma.toDouble(),
+                report.phaseDx,
+                report.phaseDy,
+                report.filter,
+                report.ssimProxy.toDouble(),
+                report.edgeKeep.toDouble(),
+                report.bandIdx.toDouble(),
+                report.deltaE95.toDouble()
             )
         } catch (_: Throwable) {
             String.format(
                 Locale.US,
-                "PreScale: Wst=%d σ=%.2f phase=%d,%d filter=%s SSIM=%.3f Edge=%.3f Band=%.3f",
-                buildDecision.wst,
-                buildDecision.sigma,
-                buildDecision.phase.dx,
-                buildDecision.phase.dy,
-                buildDecision.filter,
-                verify.ssimProxy,
-                verify.edgeKeep,
-                verify.bandIdx
+                "PreScale: Wst=%d σ=%.2f phase=%d,%d filter=%s SSIM=%.3f Edge=%.3f Band=%.3f ΔE95=%.2f",
+                report.wst,
+                report.sigma,
+                report.phaseDx,
+                report.phaseDy,
+                report.filter,
+                report.ssimProxy,
+                report.edgeKeep,
+                report.bandIdx,
+                report.deltaE95
             )
         }
+        btnRecalcLarger.visibility = if (report.frPass) View.GONE else View.VISIBLE
     }
 
     companion object {

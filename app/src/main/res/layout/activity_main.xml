@@ -53,6 +53,14 @@
             android:paddingTop="4dp"
             android:text="@string/prescale_placeholder" />
 
+        <Button
+            android:id="@+id/btnRecalcLarger"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="@string/prescale_recalc_larger"
+            android:visibility="gone" />
+
         <RadioGroup
             android:id="@+id/overrideGroup"
             android:layout_width="match_parent"

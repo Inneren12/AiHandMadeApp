@@ -73,7 +73,18 @@ class GreedyQuantTest {
                 rgb[idx + 2] = valB
             }
         }
-        val roiMap = Roi.computeProxy(rgb, w, h)
+        val lab = FloatArray(w * h * 3)
+        for (i in 0 until w * h) {
+            val labPix = PaletteMath.rgbToOklab(
+                rgb[i * 3 + 0],
+                rgb[i * 3 + 1],
+                rgb[i * 3 + 2]
+            )
+            lab[i * 3 + 0] = labPix[0]
+            lab[i * 3 + 1] = labPix[1]
+            lab[i * 3 + 2] = labPix[2]
+        }
+        val roiMap = Roi.computeProxy(lab, w, h)
         val paramsDefault = QuantParams(kStart = 4, kMax = 8)
         val paramsEdge = QuantParams(kStart = 4, kMax = 8, roiWeights = ROIWeights(edges = 4f, hitex = 1.2f, flat = 0.2f))
         val resDefault = GreedyQuant.run(rgb, w, h, paramsDefault)

@@ -10,6 +10,21 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 internal object PaletteMath {
+    fun rgbToOklab(r: Float, g: Float, b: Float): FloatArray {
+        val l = 0.4122214708f * r + 0.5363325363f * g + 0.0514459929f * b
+        val m = 0.2119034982f * r + 0.6806995451f * g + 0.1073969566f * b
+        val s = 0.0883024619f * r + 0.2817188376f * g + 0.6299787005f * b
+
+        val lRoot = cbrt(l)
+        val mRoot = cbrt(m)
+        val sRoot = cbrt(s)
+
+        val okL = 0.2104542553f * lRoot + 0.7936177850f * mRoot - 0.0040720468f * sRoot
+        val okA = 1.9779984951f * lRoot - 2.4285922050f * mRoot + 0.4505937099f * sRoot
+        val okB = 0.0259040371f * lRoot + 0.7827717662f * mRoot - 0.8086757660f * sRoot
+        return floatArrayOf(okL, okA, okB)
+    }
+
     fun deltaE(l1: Float, a1: Float, b1: Float, l2: Float, a2: Float, b2: Float): Double {
         val L1 = l1 * 100.0
         val A1 = a1 * 100.0
@@ -66,4 +81,6 @@ internal object PaletteMath {
         val angle = atan2(b.toDouble(), a)
         return if (angle >= 0) angle else angle + 2.0 * PI
     }
+
+    private fun cbrt(value: Float): Float = Math.cbrt(value.toDouble()).toFloat()
 }

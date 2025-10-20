@@ -302,6 +302,7 @@ class MainActivity : Activity(), PreviewController.Listener {
                     getString(
                         R.string.prescale_label,
                         report.wst,
+                        report.hst,
                         report.sigma.toDouble(),
                         report.phaseDx,
                         report.phaseDy,
@@ -314,8 +315,9 @@ class MainActivity : Activity(), PreviewController.Listener {
                 } catch (_: Throwable) {
                     String.format(
                         Locale.US,
-                        "PreScale: Wst=%d σ=%.2f phase=%d,%d filter=%s SSIM=%.3f Edge=%.3f Band=%.3f ΔE95=%.2f",
+                        "PreScale: Wst=%d Hst=%d σ=%.2f phase=%d,%d filter=%s SSIM=%.3f Edge=%.3f Band=%.3f ΔE95=%.2f",
                         report.wst,
+                        report.hst,
                         report.sigma,
                         report.phaseDx,
                         report.phaseDy,

@@ -135,8 +135,10 @@ object RunFull {
         }
 
         val merged = ImageOps.normalizeByWeight(outF, wsum, src.width, src.height)
-        val outL = ImageOps.luminance(merged, src.width, src.height)
-        val verify = Verify.compute(outL, src.width, src.height)
+        val out = ImageOps.packToF16(merged, src.width, src.height)
+        val rgbRef = ImageOps.extractFloatRGB(src, 0, 0, src.width, src.height)
+        val rgbOut = ImageOps.extractFloatRGB(out, 0, 0, out.width, out.height)
+        val verify = Verify.computeDetailed(rgbRef, rgbOut, src.width, src.height, null, null)
         Logger.i(
             "RUN",
             "verify",
@@ -144,10 +146,12 @@ object RunFull {
                 "ssimProxy" to "%.4f".format(verify.ssimProxy),
                 "edgeKeep" to "%.4f".format(verify.edgeKeep),
                 "bandIdx" to "%.4f".format(verify.bandIdx),
-                "dE95Proxy" to "%.2f".format(verify.deltaE95Proxy)
+                "bandSky" to "%.4f".format(verify.bandSky),
+                "bandSkin" to "%.4f".format(verify.bandSkin),
+                "dE95Proxy" to "%.2f".format(verify.deltaE95Proxy),
+                "dE95Skin" to "%.2f".format(verify.deltaE95Skin)
             )
         )
-        val out = ImageOps.packToF16(merged, src.width, src.height)
         Logger.i("RUN", "done", mapOf("ms" to 0, "memMB" to 0, "tile.count" to tiles))
         return RunResult(out, verify)
     }

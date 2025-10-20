@@ -77,7 +77,7 @@ jobs:
           elif echo "$TASKS" | grep -qE '^compileReleaseKotlin[[:space:]]'; then CORE_COMPILE=":core:compileReleaseKotlin";
           else CORE_COMPILE=":core:build"; fi
           echo "Chosen core compile task: $CORE_COMPILE"
-          ( gradle "$CORE_COMPILE" --console=plain --no-daemon --stacktrace --info 2>&1 | tee core-compile.log ) || true
+          gradle "$CORE_COMPILE" --console=plain --no-daemon --stacktrace --info 2>&1 | tee core-compile.log || echo "::error ::$CORE_COMPILE returned non-zero"
         shell: bash
 
       - name: Core unit tests (adaptive)
@@ -94,7 +94,7 @@ jobs:
           elif echo "$TASKS" | grep -qE '^testReleaseUnitTest[[:space:]]'; then CORE_TEST=":core:testReleaseUnitTest";
           else echo "No core unit test task found; skipping." | tee -a core-test.log; exit 0; fi
           echo "Chosen core test task: $CORE_TEST"
-          ( gradle "$CORE_TEST" --console=plain --no-daemon --stacktrace --info 2>&1 | tee -a core-test.log ) || true
+          gradle "$CORE_TEST" --console=plain --no-daemon --stacktrace --info 2>&1 | tee -a core-test.log || echo "::error ::$CORE_TEST returned non-zero"
         shell: bash
 
       - name: Assemble app (debug)

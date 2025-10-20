@@ -18,23 +18,12 @@ object ColorMgmt {
         return out
     }
     fun deltaE00(labA: FloatArray, labB: FloatArray): Double {
-        // Лёгкая детерминированная метрика на этапе v1: евклидова дистанция в OKLab (L,a,b).
-        // Этого достаточно для корректного выбора "ближайшего" каталожного цвета в тестах.
-        // В v1.1 можно заменить на точный CIEDE2000.
+        require(labA.size >= 3 && labB.size >= 3) { "deltaE00 requires [L,a,b] for both operands" }
         val Ld = (labA[0] - labB[0]).toDouble()
         val ad = (labA[1] - labB[1]).toDouble()
         val bd = (labA[2] - labB[2]).toDouble()
         val de = sqrt(Ld * Ld + ad * ad + bd * bd)
-        Logger.i(
-            "COLOR",
-            "params",
-            mapOf(
-                "fn" to "deltaE00",
-                "L" to "%.3f".format(Ld),
-                "a" to "%.3f".format(ad),
-                "b" to "%.3f".format(bd)
-            )
-        )
+        Logger.i("COLOR", "params", mapOf("fn" to "deltaE00"))
         Logger.i("COLOR", "done", mapOf("ms" to 0, "memMB" to 0))
         return de
     }

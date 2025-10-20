@@ -39,6 +39,13 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    // Поддержка нестандартной папки ресурсов в :app — src/main/RES (плюс стандартная res)
+    sourceSets {
+        getByName("main") {
+            res.srcDirs("src/main/RES", "src/main/res")
+        }
+    }
 }
 
 dependencies {

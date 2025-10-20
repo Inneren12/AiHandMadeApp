@@ -7,9 +7,14 @@ plugins {
 kotlin {
     jvmToolchain(17)
     sourceSets {
-        // main — дефолт (src/main/java)
+        val main by getting {
+            // Стандартные JVM-ресурсы
+            resources.srcDirs("src/main/resources")
+        }
         val test by getting {
             kotlin.srcDirs("src/test/kotlin", "src/test/java")
+            // Стандартные тестовые ресурсы
+            resources.srcDirs("src/test/resources")
         }
     }
 }

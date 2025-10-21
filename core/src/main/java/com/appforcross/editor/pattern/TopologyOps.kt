@@ -18,7 +18,8 @@ data class TopologyParams(
     val tileSize: Int = 32,
     val halo: Int = 1,
     val minRunThresholds: IntArray = intArrayOf(2, 3, 3, 4, 3),
-    val edgeBlockThreshold: Float = 0.6f
+    /* Edge barrier threshold for min-run replacement guard (in [0,1]). */
+    val edgeBlockThreshold: Float = 0.5f
 ) {
     init {
         require(tileSize > 0) { "tileSize must be positive" }
@@ -163,20 +164,43 @@ object TopologyOps {
         for (y in 0 until height) {
             var x = 0
             while (x < width) {
-                val idx = y * width + x
+                val runStart = x
+                val idx = y * width + runStart
                 val label = labels[idx]
-                var end = x + 1
+                var end = runStart + 1
                 while (end < width && labels[y * width + end] == label) end++
-                val runLength = end - x
+                val runLength = end - runStart
                 val zoneCounts = IntArray(zoneCount)
-                for (xx in x until end) {
+                for (xx in runStart until end) {
                     zoneCounts[zones[y * width + xx]]++
                 }
                 val zoneId = zoneCounts.indices.maxByOrNull { zoneCounts[it] } ?: Zone.FILL.ordinal
                 val threshold = params.threshold(zoneId)
+                x = end
+                if (runLength >= threshold) continue
+
+                var touchesStrongEdge = false
+                loop@ for (xx in runStart until end) {
+                    val px = xx
+                    val py = y
+                    for (dy in -1..1) for (dx in -1..1) {
+                        if (dx == 0 && dy == 0) continue
+                        val nx = px + dx
+                        val ny = py + dy
+                        if (nx !in 0 until width || ny !in 0 until height) continue
+                        val nLabel = labels[ny * width + nx]
+                        if (nLabel == label) continue
+                        if (hasStrongEdgeBetween(px, py, nx, ny, edgeMask, width, height, params.edgeBlockThreshold)) {
+                            touchesStrongEdge = true
+                            break@loop
+                        }
+                    }
+                }
+                if (touchesStrongEdge) continue
+
                 if (runLength < threshold) {
                     val boundaryLabels = mutableMapOf<Int, Int>()
-                    for (xx in x until end) {
+                    for (xx in runStart until end) {
                         val p = y * width + xx
                         val px = xx
                         val py = y
@@ -186,7 +210,7 @@ object TopologyOps {
                             val nx = n % width
                             val ny = n / width
                             if (abs(nx - px) > 1 || abs(ny - py) > 1) continue
-                            if (nx in x until end && ny == y) continue
+                            if (nx in runStart until end && ny == y) continue
                             if (hasStrongEdgeBetween(px, py, nx, ny, edgeMask, width, height, params.edgeBlockThreshold)) {
                                 continue
                             }
@@ -199,13 +223,12 @@ object TopologyOps {
                             if (a.value != b.value) a.value.compareTo(b.value) else a.key.compareTo(b.key)
                         }?.key ?: label
                         if (replacement != label) {
-                            for (xx in x until end) {
+                            for (xx in runStart until end) {
                                 labels[y * width + xx] = replacement
                             }
                         }
                     }
                 }
-                x = end
             }
         }
     }

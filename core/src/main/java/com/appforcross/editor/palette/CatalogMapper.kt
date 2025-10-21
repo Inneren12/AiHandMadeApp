@@ -84,9 +84,9 @@ object CatalogMapper {
             )
         }
         val avg = (sum / colors).toFloat()
-        val mapBeforeThresholds = map.copyOf()
         val status: String
         if (avg > AVG_THRESHOLD + 1e-6f || mx > MAX_THRESHOLD + EPS) {
+            // Тест ожидает статус "UNMAPPED" и фактическое зануление соответствий
             status = "UNMAPPED"
             for (i in map.indices) {
                 if (map[i] != -1) {
@@ -119,7 +119,9 @@ object CatalogMapper {
                 "status" to status
             )
         )
-        logAnchors(mapBeforeThresholds, bestDelta, catalog, status)
+        // Для консистентности логов с реальным состоянием после порогов
+        // отдаём в лог уже финальную карту соответствий (map), а не снимок до порогов.
+        logAnchors(map, bestDelta, catalog, status)
         if (status == "UNMAPPED") {
             Logger.i(
                 "CATALOG",
@@ -136,22 +138,22 @@ object CatalogMapper {
     }
 
     private fun logAnchors(
-        mapBeforeThresholds: IntArray,
+        mapping: IntArray,
         bestDelta: DoubleArray,
         catalog: List<ThreadColor>,
         status: String
     ) {
-        val primaryAnchor = anchorMatchFor(0, mapBeforeThresholds, bestDelta, catalog)
-        val secondaryAnchor = anchorMatchFor(1, mapBeforeThresholds, bestDelta, catalog)
-        val skinAnchor = anchorMatchFor(2, mapBeforeThresholds, bestDelta, catalog)
-        val skyAnchor = anchorMatchFor(3, mapBeforeThresholds, bestDelta, catalog)
+        val primaryAnchor = anchorMatchFor(0, mapping, bestDelta, catalog)
+        val secondaryAnchor = anchorMatchFor(1, mapping, bestDelta, catalog)
+        val skinAnchor = anchorMatchFor(2, mapping, bestDelta, catalog)
+        val skyAnchor = anchorMatchFor(3, mapping, bestDelta, catalog)
         val skinReason = if (skinAnchor == null) {
-            anchorFailureReason(2, mapBeforeThresholds, bestDelta, status)
+            anchorFailureReason(2, mapping, bestDelta, status)
         } else {
             null
         }
         val skyReason = if (skyAnchor == null) {
-            anchorFailureReason(3, mapBeforeThresholds, bestDelta, status)
+            anchorFailureReason(3, mapping, bestDelta, status)
         } else {
             null
         }

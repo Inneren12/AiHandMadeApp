@@ -32,7 +32,7 @@ internal object QuantizeRunner {
         Logger.i(
             "PALETTE",
             "anchors.detect",
-            mapOf(
+            mapOf<String, Any?>(
                 "black" to mapOf("L" to black.lab[0], "C" to chroma(black.lab)),
                 "white" to mapOf("L" to white.lab[0], "C" to chroma(white.lab)),
                 "neutral_mid" to mapOf(

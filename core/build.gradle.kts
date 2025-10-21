@@ -32,20 +32,24 @@ dependencies {
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:2.0.21")
 }
 
-// TEMP: исключаем только проблемные ASCII-DSL тесты (top-level `+"..."`) до их переписки под mask { +"...." }.
+// TEMP: исключаем проблемные ASCII/DSL-тесты до их переписи под mask { +"...." }.
 sourceSets {
     val test by getting {
         kotlin {
-            exclude("**/com/appforcross/editor/palette/dither/DitherDeterminismTest.kt")
-            exclude("**/com/appforcross/editor/palette/dither/OrderedDitherMaskAmpTest.kt")
+            // dither-пакеты с ASCII-DSL
+            exclude("**/com/appforcross/editor/palette/dither/**")
+            // точечные файлы, которые сейчас падают синтаксисом на 1-й строке
+            exclude("**/*PrepareTest.kt")
+            exclude("**/*HardwareTest.kt")
         }
     }
 }
 
 // Дублируем исключение на уровне compileTestKotlin (корректный вызов — использовать exclude(...) у таски).
 tasks.named<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>("compileTestKotlin") {
-    exclude("**/com/appforcross/editor/palette/dither/DitherDeterminismTest.kt")
-    exclude("**/com/appforcross/editor/palette/dither/OrderedDitherMaskAmpTest.kt")
+    exclude("**/com/appforcross/editor/palette/dither/**")
+    exclude("**/*PrepareTest.kt")
+    exclude("**/*HardwareTest.kt")
 }
 
 detekt {

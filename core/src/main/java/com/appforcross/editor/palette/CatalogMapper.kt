@@ -150,31 +150,31 @@ object CatalogMapper {
         } else {
             null
         }
-        val primaryInfo: Map<String, Any?> = primaryAnchor?.toMap() ?: mapOf("ok" to false)
-        val secondaryInfo: Map<String, Any?> = secondaryAnchor?.toMap() ?: mapOf("ok" to false)
-        val skinInfo: Map<String, Any?> =
-            if (skinAnchor != null) mapOf("ok" to true) else mapOf("ok" to false, "reason" to skinReason)
-        val skyInfo: Map<String, Any?> =
-            if (skyAnchor != null) mapOf("ok" to true) else mapOf("ok" to false, "reason" to skyReason)
         Logger.i(
             "PALETTE",
             "catalog.map",
-            linkedMapOf<String, Any?>().apply {
-                put("primary", primaryInfo)
-                put("secondary", secondaryInfo)
-                put("skin", skinInfo)
-                put("sky", skyInfo)
-            }
+            mapOf(
+                "primary" to (primaryAnchor?.toMap() ?: mapOf("ok" to false)),
+                "secondary" to (secondaryAnchor?.toMap() ?: mapOf("ok" to false)),
+                "skin" to (skinAnchor?.let { mapOf("ok" to true) } ?: mapOf(
+                    "ok" to false,
+                    "reason" to skinReason
+                )),
+                "sky" to (skyAnchor?.let { mapOf("ok" to true) } ?: mapOf(
+                    "ok" to false,
+                    "reason" to skyReason
+                ))
+            )
         )
         Logger.i(
             "PALETTE",
             "catalog.debug",
-            linkedMapOf<String, Any?>().apply {
-                put("primary", primaryAnchor?.code)
-                put("secondary", secondaryAnchor?.code)
-                put("skin", skinAnchor?.code ?: "none")
-                put("sky", skyAnchor?.code ?: "none")
-            }
+            mapOf(
+                "primary" to primaryAnchor?.code,
+                "secondary" to secondaryAnchor?.code,
+                "skin" to (skinAnchor?.code ?: "none"),
+                "sky" to (skyAnchor?.code ?: "none")
+            )
         )
     }
 

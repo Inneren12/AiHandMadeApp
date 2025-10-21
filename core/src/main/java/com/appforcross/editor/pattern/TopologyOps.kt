@@ -47,6 +47,30 @@ data class TopologyMetrics(
 object TopologyOps {
     private val zoneCount = Zone.values().size
 
+    /** Локальный максимум edgeMask в окрестности 3×3 для консервативной защиты. */
+    private fun edgeLocalMax3x3(
+        edgeMask: FloatArray,
+        width: Int,
+        height: Int,
+        x: Int,
+        y: Int
+    ): Float {
+        var maxValue = 0f
+        val cx = x.coerceIn(0, width - 1)
+        val cy = y.coerceIn(0, height - 1)
+        for (dy in -1..1) {
+            for (dx in -1..1) {
+                val px = (cx + dx).coerceIn(0, width - 1)
+                val py = (cy + dy).coerceIn(0, height - 1)
+                val value = edgeMask[py * width + px]
+                if (value > maxValue) {
+                    maxValue = value
+                }
+            }
+        }
+        return maxValue
+    }
+
     fun merge(
         labels: IntArray,
         width: Int,
@@ -196,6 +220,9 @@ object TopologyOps {
                 val x = idx % width
                 val y = idx / width
                 zoneCounts[zones[idx].coerceIn(0, zoneCount - 1)]++
+                if (!protectedByEdge && edgeLocalMax3x3(edgeMask, width, height, x, y) >= params.edgeBlockThreshold) {
+                    protectedByEdge = true
+                }
 
                 for (dy in -1..1) {
                     for (dx in -1..1) {
@@ -323,26 +350,9 @@ object TopologyOps {
     ): Boolean {
         // Консервативная оценка: берём максимум по окрестностям 3×3 вокруг концов
         // и вокруг середины отрезка между пикселями.
-        fun localMax(ix: Int, iy: Int): Float {
-            var maxValue = 0f
-            val cx = ix.coerceIn(0, width - 1)
-            val cy = iy.coerceIn(0, height - 1)
-            for (dy in -1..1) {
-                for (dx in -1..1) {
-                    val px = (cx + dx).coerceIn(0, width - 1)
-                    val py = (cy + dy).coerceIn(0, height - 1)
-                    val value = edgeMask[py * width + px]
-                    if (value > maxValue) {
-                        maxValue = value
-                    }
-                }
-            }
-            return maxValue
-        }
-
-        val e1 = localMax(x, y)
-        val e2 = localMax(nx, ny)
-        val em = localMax((x + nx) shr 1, (y + ny) shr 1)
+        val e1 = edgeLocalMax3x3(edgeMask, width, height, x, y)
+        val e2 = edgeLocalMax3x3(edgeMask, width, height, nx, ny)
+        val em = edgeLocalMax3x3(edgeMask, width, height, (x + nx) shr 1, (y + ny) shr 1)
         return max(e1, max(e2, em)) >= threshold
     }
 }

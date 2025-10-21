@@ -8,18 +8,18 @@ kotlin {
     jvmToolchain(17)
     sourceSets {
         val main by getting {
-            // Стандартные JVM-ресурсы
-            resources.srcDirs("src/main/resources", "src/main/RES")
+            // Только стандартные JVM-ресурсы
+            resources.srcDirs("src/main/resources")
         }
         val test by getting {
             kotlin.srcDirs("src/test/kotlin", "src/test/java")
-            // Стандартные тестовые ресурсы
-            resources.srcDirs("src/test/resources", "src/test/RES")
+            resources.srcDirs("src/test/resources")
         }
     }
 }
 
-// Временная страховка от дубликатов ресурсов, чтобы CI не падал
+// Страховка: если в репозитории были дублями те же файлы — игнорируем повторные копии,
+// чтобы CI не падал, пока переносим ресурсы в core/src/main/resources
 tasks.named<org.gradle.language.jvm.tasks.ProcessResources>("processResources") {
     duplicatesStrategy = org.gradle.api.file.DuplicatesStrategy.EXCLUDE
 }

@@ -14,10 +14,9 @@ kotlin {
         val test by getting {
             kotlin.srcDirs("src/test/kotlin", "src/test/java")
             resources.srcDirs("src/test/resources")
-            // TEMP: exclude broken ASCII-DSL tests that use top-level `+"..."` (not valid in .kt)
-            // We'll rework them to a builder `mask { +"...." }` and re-enable.
-            kotlin.exclude("com/appforcross/editor/palette/dither/DitherDeterminismTest.kt")
-            kotlin.exclude("com/appforcross/editor/palette/dither/OrderedDitherMaskAmpTest.kt")
+            // TEMP: исключаем только проблемные ASCII-DSL тесты (top-level `+"..."`) до их переписки под mask { +"...." }.
+            kotlin.exclude("**/com/appforcross/editor/palette/dither/DitherDeterminismTest.kt")
+            kotlin.exclude("**/com/appforcross/editor/palette/dither/OrderedDitherMaskAmpTest.kt")
         }
     }
 }
@@ -33,15 +32,10 @@ dependencies {
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:2.0.20")
 }
 
-// Исключаем проблемные тесты именно из Kotlin-компиляции тестов.
-// Эти файлы используют top-level `+"..."` (валидно для .kts, но не для .kt).
-// Вернём их после переписывания на DSL вида: mask { +"...." }.
+// Дублируем исключение на уровне compileTestKotlin (корректный вызов — использовать exclude(...) у таски).
 tasks.named<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>("compileTestKotlin") {
-    // Сохраняем все остальные тесты, выбрасываем только адресные.
-    source = source.matching {
-        exclude("**/com/appforcross/editor/palette/dither/DitherDeterminismTest.kt")
-        exclude("**/com/appforcross/editor/palette/dither/OrderedDitherMaskAmpTest.kt")
-    }
+    exclude("**/com/appforcross/editor/palette/dither/DitherDeterminismTest.kt")
+    exclude("**/com/appforcross/editor/palette/dither/OrderedDitherMaskAmpTest.kt")
 }
 
 detekt {

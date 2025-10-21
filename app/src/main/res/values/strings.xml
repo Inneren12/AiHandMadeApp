@@ -7,12 +7,12 @@
     <string name="detected_placeholder">Detected: —</string>
     <string name="preset_placeholder">Preset: —</string>
     <string name="info_template">Source: %1$d×%2$d</string>
-    <!-- %1$s = kind name, %.2f = confidence -->
-    <string name="detected_template">Detected: %1$s  (confidence %.2f)</string>
+    <!-- %1$s = kind name, %2$.2f = confidence -->
+    <string name="detected_template">Detected: %1$s  (confidence %2$.2f)</string>
     <string name="override_photo">Override PHOTO</string>
     <string name="override_discrete">Override DISCRETE</string>
-    <string name="scale_label">Scale (%)</string>
-    <string name="scale_default">100%</string>
+    <string name="scale_label" formatted="false">Scale (%)</string>
+    <string name="scale_default" formatted="false">100%</string>
     <string name="scale_template">%1$d%%</string>
     <string name="quant_label">Quantization K (0=off)</string>
     <string name="quant_off">K=off</string>

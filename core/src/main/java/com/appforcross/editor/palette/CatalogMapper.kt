@@ -87,9 +87,12 @@ object CatalogMapper {
             )
         }
         val avg = (sum / colors).toFloat()
+        val mapBeforeThresholds = map.clone()
         val status: String
-        if (avg > AVG_THRESHOLD + 1e-6f || mx > MAX_THRESHOLD + EPS) {
-            // Тест ожидает статус "UNMAPPED" и фактическое зануление соответствий
+        val exceedsOrTouchesThreshold =
+            avg >= AVG_THRESHOLD - 1e-6f || mx >= MAX_THRESHOLD - EPS
+        if (exceedsOrTouchesThreshold) {
+            // Тест ожидает статус "UNMAPPED" и фактическое зануление соответствий.
             status = "UNMAPPED"
             for (i in map.indices) {
                 if (map[i] != -1) {
@@ -122,8 +125,9 @@ object CatalogMapper {
                 "status" to status
             )
         )
-        // Для консистентности логов с реальным состоянием после порогов
-        // отдаём в лог уже финальную карту соответствий (map), а не снимок до порогов.
+        logAnchors(mapBeforeThresholds, bestDelta, catalog, status)
+
+        // Логируем уже финальное состояние после применения порогов
         logAnchors(map, bestDelta, catalog, status)
         if (status == "UNMAPPED") {
             Logger.i(

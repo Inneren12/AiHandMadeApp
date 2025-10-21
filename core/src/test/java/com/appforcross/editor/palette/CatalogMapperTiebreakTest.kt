@@ -29,6 +29,10 @@ class CatalogMapperTiebreakTest {
         val fit = CatalogMapper.mapToCatalog(palette, catalog)
         assertEquals(-1, fit.mapping[0])
         assertTrue("expected avg deltaE above threshold", fit.avgDE > 2.5f)
+        assertTrue(
+            "expected avg deltaE above threshold",
+            fit.avgDE >= CatalogThresholds.AVG - 1e-6f
+        )
         assertEquals("UNMAPPED", Logger.last()?.event)
         assertEquals("CATALOG", Logger.last()?.tag)
     }

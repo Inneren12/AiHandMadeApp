@@ -18,13 +18,13 @@ internal object QuantizeRunner {
         tauCover: Float
     ) {
         val skinInfo: Map<String, Any?> =
-            if (skinAnchor != null) mapOf("ok" to true)
+            if (skinAnchor != null) mapOf<String, Any?>("ok" to true)
             else mapOf(
                 "ok" to false,
                 "reason" to if (skinCoverage >= tauCover) "no_candidate" else "fallback"
             )
         val skyInfo: Map<String, Any?> =
-            if (skyAnchor != null) mapOf("ok" to true)
+            if (skyAnchor != null) mapOf<String, Any?>("ok" to true)
             else mapOf(
                 "ok" to false,
                 "reason" to if (skyCoverage >= tauCover) "no_candidate" else "fallback"

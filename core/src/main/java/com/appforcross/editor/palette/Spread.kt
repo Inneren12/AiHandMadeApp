@@ -7,8 +7,10 @@ object Spread {
         val colors = palette.size / 3
         if (colors <= 1) return palette
         val out = palette.copyOf()
-        repeat(4) {
-            var adjusted = false
+        var iteration = 0
+        var adjusted: Boolean
+        do {
+            adjusted = false
             for (i in 0 until colors) {
                 for (j in i + 1 until colors) {
                     val baseI = i * 3
@@ -37,49 +39,51 @@ object Spread {
                     }
                 }
             }
-            if (!adjusted) break
-        }
+            iteration++
+        } while (adjusted && iteration < 4)
 
         var safety = 0
-        while (true) {
+        var merged: Boolean
+        do {
             val pair = closestPair(out)
             val distance = pair.second
-            if (distance >= minDelta - 1e-3f || safety > colors * 8) {
-                break
+            val keepMerging = distance < minDelta - 1e-3f && safety <= colors * 8
+            if (keepMerging) {
+                val i = pair.first.first
+                val j = pair.first.second
+                val baseI = i * 3
+                val baseJ = j * 3
+                val diffL = out[baseJ + 0] - out[baseI + 0]
+                val diffA = out[baseJ + 1] - out[baseI + 1]
+                val diffB = out[baseJ + 2] - out[baseI + 2]
+                var norm = sqrt(diffL * diffL + diffA * diffA + diffB * diffB)
+                val dirL: Float
+                val dirA: Float
+                val dirB: Float
+                if (norm < 1e-5f) {
+                    norm = 1f
+                    dirL = 0.7071f
+                    dirA = 0.0f
+                    dirB = 0.7071f
+                } else {
+                    dirL = diffL / norm
+                    dirA = diffA / norm
+                    dirB = diffB / norm
+                }
+                val midL = (out[baseI + 0] + out[baseJ + 0]) * 0.5f
+                val midA = (out[baseI + 1] + out[baseJ + 1]) * 0.5f
+                val midB = (out[baseI + 2] + out[baseJ + 2]) * 0.5f
+                val half = minDelta * 0.5f
+                out[baseI + 0] = clampL(midL - dirL * half)
+                out[baseI + 1] = clampAB(midA - dirA * half)
+                out[baseI + 2] = clampAB(midB - dirB * half)
+                out[baseJ + 0] = clampL(midL + dirL * half)
+                out[baseJ + 1] = clampAB(midA + dirA * half)
+                out[baseJ + 2] = clampAB(midB + dirB * half)
+                safety++
             }
-            val i = pair.first.first
-            val j = pair.first.second
-            val baseI = i * 3
-            val baseJ = j * 3
-            val diffL = out[baseJ + 0] - out[baseI + 0]
-            val diffA = out[baseJ + 1] - out[baseI + 1]
-            val diffB = out[baseJ + 2] - out[baseI + 2]
-            var norm = sqrt(diffL * diffL + diffA * diffA + diffB * diffB)
-            val dirL: Float
-            val dirA: Float
-            val dirB: Float
-            if (norm < 1e-5f) {
-                norm = 1f
-                dirL = 0.7071f
-                dirA = 0.0f
-                dirB = 0.7071f
-            } else {
-                dirL = diffL / norm
-                dirA = diffA / norm
-                dirB = diffB / norm
-            }
-            val midL = (out[baseI + 0] + out[baseJ + 0]) * 0.5f
-            val midA = (out[baseI + 1] + out[baseJ + 1]) * 0.5f
-            val midB = (out[baseI + 2] + out[baseJ + 2]) * 0.5f
-            val half = minDelta * 0.5f
-            out[baseI + 0] = clampL(midL - dirL * half)
-            out[baseI + 1] = clampAB(midA - dirA * half)
-            out[baseI + 2] = clampAB(midB - dirB * half)
-            out[baseJ + 0] = clampL(midL + dirL * half)
-            out[baseJ + 1] = clampAB(midA + dirA * half)
-            out[baseJ + 2] = clampAB(midB + dirB * half)
-            safety++
-        }
+            merged = keepMerging
+        } while (merged)
         return out
     }
 

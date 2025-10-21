@@ -23,10 +23,8 @@ import com.appforcross.editor.scene.SceneDecision
 import com.appforcross.editor.scene.SceneKind
 import com.appforcross.editor.palette.GreedyQuant
 import com.appforcross.editor.palette.QuantParams
-import com.appforcross.editor.palette.Topology
-import com.appforcross.editor.palette.TopologyParams
+import com.appforcross.editor.palette.dither.Dither
 import com.appforcross.editor.palette.dither.DitherParams
-import com.appforcross.editor.palette.dither.OrderedDither
 import java.util.Locale
 import kotlin.collections.HashSet
 
@@ -422,7 +420,7 @@ class MainActivity : Activity(), PreviewController.Listener {
         )
         val quant = GreedyQuant.run(rgb, width, height, quantParams)
         val paletteRgb = okLabPaletteToLinearRgb(quant.colorsOKLab)
-        val dithered = OrderedDither.apply(
+        val ditherResult = Dither.apply(
             rgb,
             quant.assignments,
             paletteRgb,
@@ -430,12 +428,8 @@ class MainActivity : Activity(), PreviewController.Listener {
             height,
             DitherParams()
         )
-        val (index, topoMetrics) = Topology.clean(
-            dithered,
-            width,
-            height,
-            TopologyParams()
-        )
+        val index = ditherResult.index
+        val topoMetrics = ditherResult.topology
         Logger.i(
             "EXPORT",
             "verify",

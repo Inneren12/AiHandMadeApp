@@ -66,6 +66,12 @@ jobs:
           gradle clean :core:test :app:assembleDebug --console=plain --no-daemon --stacktrace --info 2>&1 | tee -a build.log || true
           echo "EXIT_CODE=${PIPESTATUS[0]}" | tee -a env.log
 
+      - name: Diagnose test compilation (core) — verbose
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle :core:compileTestKotlin --console=plain --no-daemon --stacktrace --debug 2>&1 | tee core-compileTest.log || true
+
       - name: Decide status by log content
         id: decide
         shell: bash
@@ -96,6 +102,7 @@ jobs:
           path: |
             env.log
             build.log
+            core-compileTest.log
             tree.txt
             gradle-projects.txt
             gradle-settings.txt

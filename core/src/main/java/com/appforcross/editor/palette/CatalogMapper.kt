@@ -22,8 +22,6 @@ object CatalogMapper {
     // thresholds aligned with thresholdsEnforceUnmappedAndLog expectations:
     // when the average ΔE00 exceeds 1.0 all matches are treated as UNMAPPED.
     // retain the original max threshold for isolated outliers.
-    private const val AVG_THRESHOLD = 1.0f
-    private const val MAX_THRESHOLD = 5.0f
     private const val EPS = 1e-12
 
     fun mapToCatalog(paletteOKLab: FloatArray, catalog: List<ThreadColor>): CatalogFit {
@@ -36,8 +34,8 @@ object CatalogMapper {
             mapOf(
                 "palette.colors" to colors,
                 "catalog.size" to catalog.size,
-                "threshold.avg" to AVG_THRESHOLD,
-                "threshold.max" to MAX_THRESHOLD
+                "threshold.avg" to CatalogThresholds.AVG,
+                "threshold.max" to CatalogThresholds.MAX
             )
         )
         val map = IntArray(colors) { -1 }
@@ -61,7 +59,7 @@ object CatalogMapper {
                     bestIdx = idx
                 }
             }
-            val assignedIdx = if (bestDE <= MAX_THRESHOLD + EPS) bestIdx else -1
+            val assignedIdx = if (bestDE <= CatalogThresholds.MAX + EPS) bestIdx else -1
             if (assignedIdx == -1) {
                 unmapped += 1
             }
@@ -90,7 +88,7 @@ object CatalogMapper {
         val mapBeforeThresholds = map.clone()
         val status: String
         val exceedsOrTouchesThreshold =
-            avg >= AVG_THRESHOLD - 1e-6f || mx >= MAX_THRESHOLD - EPS
+            avg >= CatalogThresholds.AVG - 1e-6f || mx >= CatalogThresholds.MAX - EPS
         if (exceedsOrTouchesThreshold) {
             // Тест ожидает статус "UNMAPPED" и фактическое зануление соответствий.
             status = "UNMAPPED"
@@ -120,8 +118,8 @@ object CatalogMapper {
             mapOf(
                 "avgDE" to "%.3f".format(avg),
                 "maxDE" to "%.3f".format(mx),
-                "threshold.avg" to AVG_THRESHOLD,
-                "threshold.max" to MAX_THRESHOLD,
+                "threshold.avg" to CatalogThresholds.AVG,
+                "threshold.max" to CatalogThresholds.MAX,
                 "status" to status
             )
         )
@@ -225,7 +223,7 @@ object CatalogMapper {
             val delta = bestDelta.getOrElse(paletteIndex) { Double.POSITIVE_INFINITY }
             return when {
                 status == "UNMAPPED" -> "catalog.thresholds"
-                delta.isFinite() && delta > MAX_THRESHOLD + EPS -> "deltaE.threshold"
+                delta.isFinite() && delta > CatalogThresholds.MAX + EPS -> "deltaE.threshold"
                 !delta.isFinite() -> "no_match"
                 else -> "no_candidate"
             }

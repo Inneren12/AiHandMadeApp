@@ -72,9 +72,14 @@ object CatalogMapper {
                 mapOf(
                     "palette.idx" to k,
                     "thread.idx" to assignedIdx,
-                    "thread.code" to assignedIdx.takeIf { it >= 0 }?.let { catalog[it].code } ?: "NONE",
-                    "deltaE" to "%.3f".format(bestDE),
-                    "status" to if (assignedIdx == -1) "UNMAPPED" else "OK"
+                    "thread.code" to (
+                            assignedIdx
+                                .takeIf { it >= 0 }
+                                ?.let { catalog[it].code }
+                                ?: "NONE"
+                    ),
+                "deltaE" to "%.3f".format(bestDE),
+                "status" to if (assignedIdx == -1) "UNMAPPED" else "OK"
                 )
             )
         }
@@ -156,24 +161,29 @@ object CatalogMapper {
             mapOf(
                 "primary" to (primaryAnchor?.toMap() ?: mapOf("ok" to false)),
                 "secondary" to (secondaryAnchor?.toMap() ?: mapOf("ok" to false)),
-                "skin" to (skinAnchor?.let { mapOf("ok" to true) } ?: mapOf(
-                    "ok" to false,
-                    "reason" to skinReason
-                )),
-                "sky" to (skyAnchor?.let { mapOf("ok" to true) } ?: mapOf(
-                    "ok" to false,
-                    "reason" to skyReason
-                ))
+                "skin" to (
+                        skinAnchor?.let { mapOf("ok" to true) }
+                            ?: mapOf(
+                                "ok" to false,
+                                "reason" to skinReason
+                            )
+                ),
+                "sky" to (
+                        skyAnchor?.let { mapOf("ok" to true) }
+                            ?: mapOf(
+                                "ok" to false,
+                                "reason" to skyReason)
+                )
             )
         )
         Logger.i(
             "PALETTE",
             "catalog.debug",
-            mapOf(
-                "primary" to primaryAnchor?.code,
-                "secondary" to secondaryAnchor?.code,
-                "skin" to (skinAnchor?.code ?: "none"),
-                "sky" to (skyAnchor?.code ?: "none")
+            mapOf<String, Any?>(
+                "primary" to primaryAnchor?.thread?.code,
+                "secondary" to secondaryAnchor?.thread?.code,
+                "skin" to (skinAnchor?.thread?.code ?: "none"),
+                "sky" to (skyAnchor?.thread?.code ?: "none")
             )
         )
     }

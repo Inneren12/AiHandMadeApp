@@ -27,6 +27,9 @@ tasks.named<org.gradle.language.jvm.tasks.ProcessResources>("processResources") 
 dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.google.truth:truth:1.4.3")
+    // Kotlin Test (ассерты и @Test через маппинг на JUnit4)
+    testImplementation("org.jetbrains.kotlin:kotlin-test:2.0.21")
+    testImplementation("org.jetbrains.kotlin:kotlin-test-junit:2.0.21")
 }
 
 // TEMP: исключаем только проблемные ASCII-DSL тесты (top-level `+"..."`) до их переписки под mask { +"...." }.

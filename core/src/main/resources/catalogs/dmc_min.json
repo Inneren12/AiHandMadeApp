@@ -1,0 +1,24 @@
+{
+  "catalog": [
+    {
+      "code": "DMC-3865",
+      "name": "Winter White",
+      "rgb": "F9F6EE"
+    },
+    {
+      "code": "DMC-310",
+      "name": "Black",
+      "rgb": "000000"
+    },
+    {
+      "code": "DMC-321",
+      "name": "Red",
+      "rgb": "C40036"
+    },
+    {
+      "code": "DMC-699",
+      "name": "Green",
+      "rgb": "005C29"
+    }
+  ]
+}

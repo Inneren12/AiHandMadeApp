@@ -321,15 +321,28 @@ object TopologyOps {
         height: Int,
         threshold: Float
     ): Boolean {
-        fun sample(ix: Int, iy: Int): Float {
-            val sx = ix.coerceIn(0, width - 1)
-            val sy = iy.coerceIn(0, height - 1)
-            return edgeMask[sy * width + sx]
+        // Консервативная оценка: берём максимум по окрестностям 3×3 вокруг концов
+        // и вокруг середины отрезка между пикселями.
+        fun localMax(ix: Int, iy: Int): Float {
+            var maxValue = 0f
+            val cx = ix.coerceIn(0, width - 1)
+            val cy = iy.coerceIn(0, height - 1)
+            for (dy in -1..1) {
+                for (dx in -1..1) {
+                    val px = (cx + dx).coerceIn(0, width - 1)
+                    val py = (cy + dy).coerceIn(0, height - 1)
+                    val value = edgeMask[py * width + px]
+                    if (value > maxValue) {
+                        maxValue = value
+                    }
+                }
+            }
+            return maxValue
         }
 
-        val e1 = sample(x, y)
-        val e2 = sample(nx, ny)
-        val em = sample((x + nx) shr 1, (y + ny) shr 1)
+        val e1 = localMax(x, y)
+        val e2 = localMax(nx, ny)
+        val em = localMax((x + nx) shr 1, (y + ny) shr 1)
         return max(e1, max(e2, em)) >= threshold
     }
 }

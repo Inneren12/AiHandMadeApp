@@ -1,0 +1,24 @@
+{
+  "catalog": [
+    {
+      "code": "ANCH-001",
+      "name": "Snow",
+      "rgb": "FFFFFF"
+    },
+    {
+      "code": "ANCH-403",
+      "name": "Slate",
+      "rgb": "6F737A"
+    },
+    {
+      "code": "ANCH-897",
+      "name": "Rose",
+      "rgb": "C94364"
+    },
+    {
+      "code": "ANCH-1098",
+      "name": "Forest",
+      "rgb": "1F5B2E"
+    }
+  ]
+}

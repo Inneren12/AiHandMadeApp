@@ -214,7 +214,9 @@ object TopologyOps {
                         } else {
                             if (hasStrongEdgeBetween(x, y, nx, ny, edgeMask, width, height, params.edgeBlockThreshold)) {
                                 protectedByEdge = true
-                            } else if (nLabel >= 0) {
+                                continue
+                            }
+                            if (nLabel >= 0) {
                                 boundaryVotes[nLabel] = (boundaryVotes[nLabel] ?: 0) + 1
                             }
                         }

@@ -19,7 +19,10 @@ data class ThreadColor(val code: String, val name: String, val okLab: FloatArray
 data class CatalogFit(val avgDE: Float, val maxDE: Float, val mapping: IntArray)
 
 object CatalogMapper {
-    private const val AVG_THRESHOLD = 2.5f
+    // thresholds aligned with thresholdsEnforceUnmappedAndLog expectations:
+    // when the average ΔE00 exceeds 1.0 all matches are treated as UNMAPPED.
+    // retain the original max threshold for isolated outliers.
+    private const val AVG_THRESHOLD = 1.0f
     private const val MAX_THRESHOLD = 5.0f
     private const val EPS = 1e-12
 

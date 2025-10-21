@@ -175,7 +175,6 @@ object TopologyOps {
                 val zoneId = zoneCounts.indices.maxByOrNull { zoneCounts[it] } ?: Zone.FILL.ordinal
                 val threshold = params.threshold(zoneId)
                 if (runLength < threshold) {
-                    var blocked = false
                     val boundaryLabels = mutableMapOf<Int, Int>()
                     for (xx in x until end) {
                         val p = y * width + xx
@@ -188,17 +187,14 @@ object TopologyOps {
                             val ny = n / width
                             if (abs(nx - px) > 1 || abs(ny - py) > 1) continue
                             if (nx in x until end && ny == y) continue
-                            val maxEdge = max(edgeMask[p], edgeMask[n])
-                            if (maxEdge > params.edgeBlockThreshold) {
-                                blocked = true
-                                break
+                            if (hasStrongEdgeBetween(px, py, nx, ny, edgeMask, width, height, params.edgeBlockThreshold)) {
+                                continue
                             }
                             val value = labels[n]
                             boundaryLabels[value] = (boundaryLabels[value] ?: 0) + 1
                         }
-                        if (blocked) break
                     }
-                    if (!blocked && boundaryLabels.isNotEmpty()) {
+                    if (boundaryLabels.isNotEmpty()) {
                         val replacement = boundaryLabels.entries.maxWithOrNull { a, b ->
                             if (a.value != b.value) a.value.compareTo(b.value) else a.key.compareTo(b.key)
                         }?.key ?: label
@@ -275,5 +271,27 @@ object TopologyOps {
         runs.sort()
         val mid = runs.size / 2
         return if (runs.size % 2 == 1) runs[mid].toFloat() else 0.5f * (runs[mid - 1] + runs[mid])
+    }
+
+    private fun hasStrongEdgeBetween(
+        x: Int,
+        y: Int,
+        nx: Int,
+        ny: Int,
+        edgeMask: FloatArray,
+        width: Int,
+        height: Int,
+        threshold: Float
+    ): Boolean {
+        fun sample(ix: Int, iy: Int): Float {
+            val sx = ix.coerceIn(0, width - 1)
+            val sy = iy.coerceIn(0, height - 1)
+            return edgeMask[sy * width + sx]
+        }
+
+        val e1 = sample(x, y)
+        val e2 = sample(nx, ny)
+        val em = sample((x + nx) shr 1, (y + ny) shr 1)
+        return max(e1, max(e2, em)) >= threshold
     }
 }

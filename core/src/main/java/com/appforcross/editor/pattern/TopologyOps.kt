@@ -14,13 +14,16 @@ enum class Zone {
     FILL
 }
 
+/** Edge barrier threshold for min-run replacement guard (in [0,1]). */
+private const val EDGE_BLOCK_THR: Float = 0.40f
+
 /** Parameters controlling the topology merge. */
 data class TopologyParams(
     val tileSize: Int = 32,
     val halo: Int = 1,
     val minRunThresholds: IntArray = intArrayOf(2, 3, 3, 4, 3),
     /* Edge barrier threshold for min-run replacement guard (in [0,1]). */
-    val edgeBlockThreshold: Float = 0.40f
+    val edgeBlockThreshold: Float = EDGE_BLOCK_THR
 ) {
     init {
         require(tileSize > 0) { "tileSize must be positive" }

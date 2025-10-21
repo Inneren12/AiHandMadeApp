@@ -4,6 +4,17 @@ import com.appforcross.editor.color.ColorMgmt
 import com.appforcross.editor.logging.Logger
 import kotlin.math.abs
 
+// --- Local helper to avoid Pair<K,V> inference issues with heterogeneous values in mapOf(...) ---
+// This shadows kotlin.collections.mapOf inside this file only,
+// accepting Pair<String, *> and returning Map<String, Any?> deterministically.
+private fun mapOf(vararg pairs: Pair<String, *>): Map<String, Any?> {
+    val m = java.util.LinkedHashMap<String, Any?>(pairs.size)
+    for (p in pairs) {
+        m[p.first] = p.second
+    }
+    return m
+}
+
 data class ThreadColor(val code: String, val name: String, val okLab: FloatArray)
 data class CatalogFit(val avgDE: Float, val maxDE: Float, val mapping: IntArray)
 

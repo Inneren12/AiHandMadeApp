@@ -139,22 +139,22 @@ object CatalogMapper {
         } else {
             null
         }
-        Logger.i(
-            "PALETTE",
-            "catalog.map",
-            mapOf<String, Any?>(
-                "primary" to (primaryAnchor?.toMap() ?: mapOf("ok" to false)),
-                "secondary" to (secondaryAnchor?.toMap() ?: mapOf("ok" to false)),
-                "skin" to (skinAnchor?.let { mapOf("ok" to true) } ?: mapOf(
-                    "ok" to false,
-                    "reason" to (skinReason ?: "unknown")
-                )),
-                "sky" to (skyAnchor?.let { mapOf("ok" to true) } ?: mapOf(
-                    "ok" to false,
-                    "reason" to (skyReason ?: "unknown")
-                ))
-            )
-        )
+        run {
+            val payload = linkedMapOf<String, Any?>()
+            payload["primary"] = primaryAnchor?.toMap() ?: mapOf("ok" to false)
+            payload["secondary"] = secondaryAnchor?.toMap() ?: mapOf("ok" to false)
+            payload["skin"] = if (skinAnchor != null) {
+                mapOf("ok" to true)
+            } else {
+                mapOf("ok" to false, "reason" to skinReason)
+            }
+            payload["sky"] = if (skyAnchor != null) {
+                mapOf("ok" to true)
+            } else {
+                mapOf("ok" to false, "reason" to skyReason)
+            }
+            Logger.i("PALETTE", "catalog.map", payload)
+        }
     }
 
     private fun anchorMatchFor(

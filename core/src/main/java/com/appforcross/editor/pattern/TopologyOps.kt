@@ -20,7 +20,7 @@ data class TopologyParams(
     val halo: Int = 1,
     val minRunThresholds: IntArray = intArrayOf(2, 3, 3, 4, 3),
     /* Edge barrier threshold for min-run replacement guard (in [0,1]). */
-    val edgeBlockThreshold: Float = 0.5f
+    val edgeBlockThreshold: Float = 0.45f
 ) {
     init {
         require(tileSize > 0) { "tileSize must be positive" }

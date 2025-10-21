@@ -40,6 +40,8 @@ jobs:
         run: |
           : > env.log
           : > build.log
+          : > core-compile.log
+          : > core-compileTest.log
           : > tree.txt
           : > gradle-projects.txt
           : > gradle-settings.txt
@@ -65,6 +67,12 @@ jobs:
           set -o pipefail
           gradle clean :core:test :app:assembleDebug --console=plain --no-daemon --stacktrace --info 2>&1 | tee -a build.log || true
           echo "EXIT_CODE=${PIPESTATUS[0]}" | tee -a env.log
+
+      - name: Diagnose core compile (main)
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle :core:compileKotlin --console=plain --no-daemon --stacktrace --debug 2>&1 | tee core-compile.log || true
 
       - name: Diagnose test compilation (core) — verbose
         shell: bash
@@ -102,6 +110,7 @@ jobs:
           path: |
             env.log
             build.log
+            core-compile.log
             core-compileTest.log
             tree.txt
             gradle-projects.txt

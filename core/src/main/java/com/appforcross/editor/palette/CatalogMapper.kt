@@ -139,6 +139,22 @@ object CatalogMapper {
         } else {
             null
         }
+        Logger.i(
+            "PALETTE",
+            "catalog.map",
+            mapOf(
+                "primary" to primaryAnchor?.toMap() ?: mapOf("ok" to false),
+                "secondary" to secondaryAnchor?.toMap() ?: mapOf("ok" to false),
+                "skin" to skinAnchor?.let { mapOf("ok" to true) } ?: mapOf(
+                    "ok" to false,
+                    "reason" to skinReason
+                ),
+                "sky" to skyAnchor?.let { mapOf("ok" to true) } ?: mapOf(
+                    "ok" to false,
+                    "reason" to skyReason
+                )
+            )
+        )
         run {
             val payload = linkedMapOf<String, Any?>()
             payload["primary"] = primaryAnchor?.toMap() ?: mapOf("ok" to false)

@@ -1,5 +1,6 @@
 package com.appforcross.editor.pattern
 
+import java.util.HashMap
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -160,75 +161,87 @@ object TopologyOps {
         edgeMask: FloatArray,
         params: TopologyParams
     ) {
-        val neighborOffsets = intArrayOf(-width - 1, -width, -width + 1, -1, 1, width - 1, width, width + 1)
-        for (y in 0 until height) {
-            var x = 0
-            while (x < width) {
-                val runStart = x
-                val idx = y * width + runStart
-                val label = labels[idx]
-                var end = runStart + 1
-                while (end < width && labels[y * width + end] == label) end++
-                val runLength = end - runStart
-                val zoneCounts = IntArray(zoneCount)
-                for (xx in runStart until end) {
-                    zoneCounts[zones[y * width + xx]]++
-                }
-                val zoneId = zoneCounts.indices.maxByOrNull { zoneCounts[it] } ?: Zone.FILL.ordinal
-                val threshold = params.threshold(zoneId)
-                x = end
-                if (runLength >= threshold) continue
+        val total = width * height
+        val visited = BooleanArray(total)
+        val queue = IntArray(total)
+        val members = IntArray(total)
+        val boundaryVotes = HashMap<Int, Int>(8)
 
-                var touchesStrongEdge = false
-                loop@ for (xx in runStart until end) {
-                    val px = xx
-                    val py = y
-                    for (dy in -1..1) for (dx in -1..1) {
+        fun selectThreshold(zoneId: Int): Int {
+            return params.threshold(zoneId)
+        }
+
+        for (start in 0 until total) {
+            if (visited[start]) continue
+            val label = labels[start]
+            if (label < 0) {
+                visited[start] = true
+                continue
+            }
+
+            var head = 0
+            var tail = 0
+            queue[tail++] = start
+            visited[start] = true
+
+            var size = 0
+            var protectedByEdge = false
+            boundaryVotes.clear()
+            val zoneCounts = IntArray(zoneCount)
+
+            while (head < tail) {
+                val idx = queue[head++]
+                members[size++] = idx
+
+                val x = idx % width
+                val y = idx / width
+                zoneCounts[zones[idx].coerceIn(0, zoneCount - 1)]++
+
+                for (dy in -1..1) {
+                    for (dx in -1..1) {
                         if (dx == 0 && dy == 0) continue
-                        val nx = px + dx
-                        val ny = py + dy
+                        val nx = x + dx
+                        val ny = y + dy
                         if (nx !in 0 until width || ny !in 0 until height) continue
-                        val nLabel = labels[ny * width + nx]
-                        if (nLabel == label) continue
-                        if (hasStrongEdgeBetween(px, py, nx, ny, edgeMask, width, height, params.edgeBlockThreshold)) {
-                            touchesStrongEdge = true
-                            break@loop
-                        }
-                    }
-                }
-                if (touchesStrongEdge) continue
 
-                if (runLength < threshold) {
-                    val boundaryLabels = mutableMapOf<Int, Int>()
-                    for (xx in runStart until end) {
-                        val p = y * width + xx
-                        val px = xx
-                        val py = y
-                        for (offset in neighborOffsets) {
-                            val n = p + offset
-                            if (n < 0 || n >= labels.size) continue
-                            val nx = n % width
-                            val ny = n / width
-                            if (abs(nx - px) > 1 || abs(ny - py) > 1) continue
-                            if (nx in runStart until end && ny == y) continue
-                            if (hasStrongEdgeBetween(px, py, nx, ny, edgeMask, width, height, params.edgeBlockThreshold)) {
-                                continue
+                        val nIdx = ny * width + nx
+                        val nLabel = labels[nIdx]
+                        if (nLabel == label) {
+                            if (!visited[nIdx]) {
+                                visited[nIdx] = true
+                                queue[tail++] = nIdx
                             }
-                            val value = labels[n]
-                            boundaryLabels[value] = (boundaryLabels[value] ?: 0) + 1
-                        }
-                    }
-                    if (boundaryLabels.isNotEmpty()) {
-                        val replacement = boundaryLabels.entries.maxWithOrNull { a, b ->
-                            if (a.value != b.value) a.value.compareTo(b.value) else a.key.compareTo(b.key)
-                        }?.key ?: label
-                        if (replacement != label) {
-                            for (xx in runStart until end) {
-                                labels[y * width + xx] = replacement
+                        } else {
+                            if (hasStrongEdgeBetween(x, y, nx, ny, edgeMask, width, height, params.edgeBlockThreshold)) {
+                                protectedByEdge = true
+                            } else if (nLabel >= 0) {
+                                boundaryVotes[nLabel] = (boundaryVotes[nLabel] ?: 0) + 1
                             }
                         }
                     }
                 }
+            }
+
+            val zoneId = zoneCounts.indices.maxByOrNull { zoneCounts[it] } ?: Zone.FILL.ordinal
+            val threshold = selectThreshold(zoneId)
+            if (size >= threshold) {
+                continue
+            }
+
+            if (protectedByEdge || boundaryVotes.isEmpty()) {
+                continue
+            }
+
+            val replacement = boundaryVotes.entries
+                .maxWithOrNull(compareBy<Map.Entry<Int, Int>>({ it.value }, { -it.key }))
+                ?.key ?: label
+
+            if (replacement == label) {
+                continue
+            }
+
+            for (i in 0 until size) {
+                labels[members[i]] = replacement
             }
         }
     }

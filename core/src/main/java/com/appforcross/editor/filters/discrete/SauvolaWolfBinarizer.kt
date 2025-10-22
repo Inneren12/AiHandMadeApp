@@ -12,7 +12,13 @@ import com.appforcross.editor.types.U8Mask
 
 internal class SauvolaWolfBinarizer(private val config: BinarizationConfig) {
 
-    fun apply(image: LinearImageF16, scratch: FloatArray, scratchSq: FloatArray, buffer: ByteArray): U8Mask {
+    fun apply(
+        image: LinearImageF16,
+        scratch: FloatArray,
+        scratchSq: FloatArray,
+        buffer: ByteArray,
+        roi: Roi? = null,
+    ): U8Mask {
         Logger.i(
             TAG,
             "params",
@@ -28,15 +34,19 @@ internal class SauvolaWolfBinarizer(private val config: BinarizationConfig) {
         val start = System.nanoTime()
         require(image.planes >= 1) { "Binarizer expects at least one plane" }
         require(config.wBin >= 3 && config.wBin % 2 == 1) { "Window size must be odd and >=3" }
-        if (!config.enabled) {
-            buffer.fill(0)
-            Logger.i(TAG, "done", mapOf("stage" to "binarize", "ms" to elapsedMs(start), "memMB" to 0))
-            return U8Mask(image.width, image.height, buffer.copyOf())
-        }
-
         val width = image.width
         val height = image.height
         val planeOffset = width * height
+        if (buffer.size < planeOffset) {
+            throw IllegalArgumentException("Mask buffer too small for binarizer")
+        }
+        buffer.fill(0, 0, planeOffset)
+
+        if (!config.enabled) {
+            Logger.i(TAG, "done", mapOf("stage" to "binarize", "ms" to elapsedMs(start), "memMB" to 0))
+            return U8Mask(width, height, buffer.copyOf())
+        }
+
         val floats = scratch
         for (i in 0 until planeOffset) {
             floats[i] = HalfFloats.toFloat(image.data[i])
@@ -70,10 +80,12 @@ internal class SauvolaWolfBinarizer(private val config: BinarizationConfig) {
         }
         val globalStd = sqrt(max(globalVariance / max(1, globalCount - 1), 1e-6f))
 
-        val maskData = buffer
         val area = config.wBin * config.wBin
         for (y in 0 until height) {
             for (x in 0 until width) {
+                if (roi != null && !roi.contains(x, y)) {
+                    continue
+                }
                 val sum = regionSum(integral, x, y, radius, padW)
                 val sumSq = regionSum(integralSq, x, y, radius, padW)
                 val mean = sum / area
@@ -83,12 +95,12 @@ internal class SauvolaWolfBinarizer(private val config: BinarizationConfig) {
                 val normalizedStd = if (globalStd > 0f) std / globalStd else 0f
                 val minTerm = (value - globalMin) / max(1e-3f, globalMax - globalMin)
                 val threshold = mean + config.k * (normalizedStd - 1f) * mean + 0.1f * (minTerm - 0.5f)
-                maskData[y * width + x] = if (value >= threshold) 1 else 0
+                buffer[y * width + x] = if (value >= threshold) 1 else 0
             }
         }
 
         if (config.smoothing) {
-            smooth3x3(maskData, width, height)
+            smooth3x3(buffer, width, height, roi)
         }
 
         Logger.i(
@@ -101,7 +113,7 @@ internal class SauvolaWolfBinarizer(private val config: BinarizationConfig) {
             ),
         )
 
-        return U8Mask(width, height, maskData.copyOf())
+        return U8Mask(width, height, buffer.copyOf())
     }
 
     private fun ensureSize(size: Int, scratchSq: FloatArray): FloatArray {
@@ -173,10 +185,14 @@ internal class SauvolaWolfBinarizer(private val config: BinarizationConfig) {
         return d - b - c + a
     }
 
-    private fun smooth3x3(mask: ByteArray, width: Int, height: Int) {
+    private fun smooth3x3(mask: ByteArray, width: Int, height: Int, roi: Roi?) {
         val copy = mask.copyOf()
         for (y in 0 until height) {
             for (x in 0 until width) {
+                if (roi != null && !roi.contains(x, y)) {
+                    mask[y * width + x] = 0
+                    continue
+                }
                 var sum = 0
                 var count = 0
                 for (dy in -1..1) {
@@ -185,11 +201,12 @@ internal class SauvolaWolfBinarizer(private val config: BinarizationConfig) {
                     for (dx in -1..1) {
                         val xx = x + dx
                         if (xx < 0 || xx >= width) continue
+                        if (roi != null && !roi.contains(xx, yy)) continue
                         sum += copy[yy * width + xx].toInt()
                         count++
                     }
                 }
-                mask[y * width + x] = if (sum * 2 >= count) 1 else 0
+                mask[y * width + x] = if (count == 0) 0 else if (sum * 2 >= count) 1 else 0
             }
         }
     }

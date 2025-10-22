@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
+import com.appforcross.editor.filters.discrete.Roi
 import com.appforcross.editor.types.HalfFloats
 import com.appforcross.editor.types.LinearImageF16
 
@@ -48,14 +49,18 @@ class DiscretePipelineTest {
             ),
         )
         val pipeline = DiscretePipeline(config)
+        val roi = Roi(left = 1, top = 2, right = 7, bottom = 6)
 
-        val output = pipeline.run(image)
+        val output = pipeline.run(image, roi)
 
         assertTrue(output.roiAccepted)
         val ones = output.mask.data.count { it.toInt() != 0 }
         assertTrue(ones > width)
         // ensure mask deterministic by spot checking corners
         assertEquals(0, output.mask.data[0].toInt())
+        assertEquals(0, output.mask.data[width * 3 + 0].toInt())
         assertEquals(1, output.mask.data[width * 3 + 2].toInt())
+        assertEquals(0, output.mask.data[width * (roi.top - 1) + roi.left].toInt())
+        assertEquals(0, output.mask.data[width * roi.bottom + roi.left].toInt())
     }
 }

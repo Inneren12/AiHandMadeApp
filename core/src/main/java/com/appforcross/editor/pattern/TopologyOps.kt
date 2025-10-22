@@ -50,8 +50,8 @@ data class TopologyMetrics(
 object TopologyOps {
     private val zoneCount = Zone.values().size
 
-    /** Локальный максимум edgeMask в окрестности 3×3 для консервативной защиты. */
-    private fun edgeLocalMax3x3(
+    /** Локальный максимум edgeMask в окрестности 5×5 (радиус=2) для консервативной защиты. */
+    private fun edgeLocalMax5x5(
         edgeMask: FloatArray,
         width: Int,
         height: Int,
@@ -61,8 +61,8 @@ object TopologyOps {
         var maxValue = 0f
         val cx = x.coerceIn(0, width - 1)
         val cy = y.coerceIn(0, height - 1)
-        for (dy in -1..1) {
-            for (dx in -1..1) {
+        for (dy in -2..2) {
+            for (dx in -2..2) {
                 val px = (cx + dx).coerceIn(0, width - 1)
                 val py = (cy + dy).coerceIn(0, height - 1)
                 val value = edgeMask[py * width + px]
@@ -224,7 +224,7 @@ object TopologyOps {
                 val x = idx % width
                 val y = idx / width
                 zoneCounts[zones[idx].coerceIn(0, zoneCount - 1)]++
-                if (!protectedByEdge && edgeLocalMax3x3(edgeMask, width, height, x, y) >= params.edgeBlockThreshold) {
+                if (!protectedByEdge && edgeLocalMax5x5(edgeMask, width, height, x, y) >= params.edgeBlockThreshold) {
                     protectedByEdge = true
                 }
 
@@ -365,14 +365,14 @@ object TopologyOps {
         height: Int,
         threshold: Float
     ): Boolean {
-        // Консервативная оценка: максимум edgeMask по 3×3 окрестности
+        // Консервативная оценка: максимум edgeMask по 5×5 окрестности
         // в нескольких пробах вдоль отрезка (t = 0, 0.25, 0.5, 0.75, 1).
         val samples = floatArrayOf(0f, 0.25f, 0.5f, 0.75f, 1f)
         var maxValue = 0f
         for (t in samples) {
             val sx = (x + t * (nx - x)).toInt()
             val sy = (y + t * (ny - y)).toInt()
-            val localMax = edgeLocalMax3x3(edgeMask, width, height, sx, sy)
+            val localMax = edgeLocalMax5x5(edgeMask, width, height, sx, sy)
             if (localMax > maxValue) {
                 maxValue = localMax
                 if (maxValue >= threshold) {

@@ -18,7 +18,7 @@ enum class Zone {
 /** Edge barrier base threshold for min-run replacement guard (in [0,1]). */
 internal const val EDGE_BASE_THRESHOLD: Float = 0.30f
 
-private const val EDGE_NEAR_RATIO: Float = 0.95f
+internal const val EDGE_NEAR_RATIO: Float = 0.95f
 
 internal const val EDGE_WINDOW_RADIUS: Int = 3
 
@@ -222,6 +222,16 @@ object TopologyOps {
         }
     }
 
+    private fun pottsLite(
+        labels: IntArray,
+        width: Int,
+        height: Int,
+        edgeMask: FloatArray,
+        params: TopologyParams
+    ) {
+        pottsLite(labels, width, height, edgeMask, params, BooleanArray(width * height))
+    }
+
     private fun minRunMerge(
         labels: IntArray,
         width: Int,
@@ -422,6 +432,20 @@ object TopologyOps {
                 "topology.merge_cancelled_by_tie" to cancelledByTie
             )
         )
+    }
+
+    private fun minRunMerge(
+        labels: IntArray,
+        width: Int,
+        height: Int,
+        zones: IntArray,
+        edgeMask: FloatArray,
+        params: TopologyParams,
+        configuredThreshold: Float
+    ) {
+        val baseThreshold = max(configuredThreshold, EDGE_BASE_THRESHOLD).coerceIn(0f, 1f)
+        val noCrossMask = buildNoCrossMask(edgeMask, width, height, baseThreshold)
+        minRunMerge(labels, width, height, zones, edgeMask, params, baseThreshold, noCrossMask)
     }
 
     private fun countThreadChanges(labels: IntArray, width: Int, height: Int): Int {

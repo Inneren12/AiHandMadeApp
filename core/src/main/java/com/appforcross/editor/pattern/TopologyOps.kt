@@ -123,11 +123,12 @@ object TopologyOps {
         require(zones.size == labels.size) { "zones length mismatch" }
         require(edgeMask.size == labels.size) { "edgeMask length mismatch" }
 
-        val working = labels.copyOf()
+        val original = labels.copyOf()
+        val working = original.copyOf()
         val baseThreshold = max(params.edgeBlockThreshold, EDGE_BASE_THRESHOLD).coerceIn(0f, 1f)
         val noCrossMask = buildNoCrossMask(edgeMask, width, height, baseThreshold)
         pottsLite(working, width, height, edgeMask, params, noCrossMask)
-        minRunMerge(working, width, height, zones, edgeMask, params, baseThreshold, noCrossMask)
+        minRunMerge(working, original, width, height, zones, edgeMask, params, baseThreshold, noCrossMask)
         return working
     }
 
@@ -234,6 +235,7 @@ object TopologyOps {
 
     private fun minRunMerge(
         labels: IntArray,
+        originalLabels: IntArray,
         width: Int,
         height: Int,
         zones: IntArray,
@@ -267,11 +269,17 @@ object TopologyOps {
         val neighborDx = intArrayOf(0, -1, 1, 0)
         val neighborDy = intArrayOf(-1, 0, 0, 1)
 
+        fun restoreComponent(size: Int, targetLabel: Int) {
+            for (i in 0 until size) {
+                labels[members[i]] = targetLabel
+            }
+        }
+
         for (start in 0 until total) {
             if (visited[start]) continue
-            val label = labels[start]
-            if (label < 0) {
-                visited[start] = true
+            val componentLabel = originalLabels[start]
+            visited[start] = true
+            if (componentLabel < 0) {
                 continue
             }
 
@@ -280,7 +288,6 @@ object TopologyOps {
             var head = 0
             var tail = 0
             queue[tail++] = start
-            visited[start] = true
 
             var size = 0
             var perimeterCount = 0
@@ -300,8 +307,8 @@ object TopologyOps {
                     if (nx !in 0 until width || ny !in 0 until height) continue
 
                     val nIdx = ny * width + nx
-                    val nLabel = labels[nIdx]
-                    if (nLabel == label) {
+                    val neighborOriginal = originalLabels[nIdx]
+                    if (neighborOriginal == componentLabel) {
                         if (!visited[nIdx]) {
                             visited[nIdx] = true
                             queue[tail++] = nIdx
@@ -324,7 +331,8 @@ object TopologyOps {
                                 height
                             )
                             barrierFlags[boundaryIndex] = noCrossMask[idx] || noCrossMask[nIdx]
-                            boundaryLabels[boundaryIndex] = if (nLabel >= 0) nLabel else -1
+                            val neighborLabel = labels[nIdx]
+                            boundaryLabels[boundaryIndex] = if (neighborLabel >= 0) neighborLabel else -1
                             perimeterCount++
                         }
                     }
@@ -339,6 +347,7 @@ object TopologyOps {
 
             if (perimeterCount == 0) {
                 cancelledByVotes++
+                restoreComponent(size, componentLabel)
                 continue
             }
 
@@ -351,7 +360,7 @@ object TopologyOps {
             var barrierHit = false
             var perimeterStrong = false
             var probeStrong = false
-            var probeNear = false
+            var nearHit = false
             boundaryVotes.clear()
 
             for (i in 0 until perimeterCount) {
@@ -367,12 +376,16 @@ object TopologyOps {
                     perimeterStrong = true
                     continue
                 }
+                if (edgeValue >= nearThreshold) {
+                    nearHit = true
+                    continue
+                }
                 if (probeValue >= adaptiveThreshold) {
                     probeStrong = true
                     continue
                 }
                 if (probeValue >= nearThreshold) {
-                    probeNear = true
+                    nearHit = true
                     continue
                 }
                 if (neighborLabel >= 0) {
@@ -382,41 +395,50 @@ object TopologyOps {
 
             if (barrierHit || perimeterStrong) {
                 cancelledByBarrier++
+                restoreComponent(size, componentLabel)
                 continue
             }
             if (probeStrong) {
                 cancelledByProbe++
+                restoreComponent(size, componentLabel)
                 continue
             }
-            if (probeNear) {
+            if (nearHit) {
                 cancelledByNear++
+                restoreComponent(size, componentLabel)
                 continue
             }
             if (boundaryVotes.isEmpty()) {
                 cancelledByVotes++
+                restoreComponent(size, componentLabel)
                 continue
             }
 
             val maxVotes = boundaryVotes.values.maxOrNull() ?: 0
             if (maxVotes < MIN_VOTES_FOR_MERGE) {
                 cancelledByVotes++
+                restoreComponent(size, componentLabel)
                 continue
             }
             val contenders = boundaryVotes.filterValues { it == maxVotes }
             if (contenders.size != 1) {
                 cancelledByTie++
+                restoreComponent(size, componentLabel)
                 continue
             }
 
             val replacement = contenders.keys.first()
-            if (replacement == label) {
-                continue
-            }
-
+            var changed = false
             for (i in 0 until size) {
-                labels[members[i]] = replacement
+                val idx = members[i]
+                if (labels[idx] != replacement) {
+                    labels[idx] = replacement
+                    changed = true
+                }
             }
-            mergesApplied++
+            if (changed) {
+                mergesApplied++
+            }
         }
 
         Logger.i(
@@ -443,9 +465,10 @@ object TopologyOps {
         params: TopologyParams,
         configuredThreshold: Float
     ) {
+        val originalCopy = labels.copyOf()
         val baseThreshold = max(configuredThreshold, EDGE_BASE_THRESHOLD).coerceIn(0f, 1f)
         val noCrossMask = buildNoCrossMask(edgeMask, width, height, baseThreshold)
-        minRunMerge(labels, width, height, zones, edgeMask, params, baseThreshold, noCrossMask)
+        minRunMerge(labels, originalCopy, width, height, zones, edgeMask, params, baseThreshold, noCrossMask)
     }
 
     private fun countThreadChanges(labels: IntArray, width: Int, height: Int): Int {

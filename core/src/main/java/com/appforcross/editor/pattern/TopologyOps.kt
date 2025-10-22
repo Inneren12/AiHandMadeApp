@@ -15,7 +15,7 @@ enum class Zone {
 }
 
 /** Edge barrier threshold for min-run replacement guard (in [0,1]). */
-private const val EDGE_BLOCK_THR: Float = 0.35f
+private const val EDGE_BLOCK_THR: Float = 0.25f
 
 /** Parameters controlling the topology merge. */
 data class TopologyParams(

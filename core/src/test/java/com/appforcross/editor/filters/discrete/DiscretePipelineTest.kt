@@ -39,7 +39,7 @@ class DiscretePipelineTest {
         val config = DiscreteConfig(
             enabled = true,
             binarization = BinarizationConfig(wBin = 3, k = 0.25f, smoothing = false),
-            moire = MoireConfig(enabled = false, mode = MoireSuppressor.Mode.OFF),
+            moire = MoireConfig(enabled = false, mode = MoireMode.OFF),
             morphology = MorphologyConfig(
                 enabled = true,
                 roiMinForeground = 0.1f,

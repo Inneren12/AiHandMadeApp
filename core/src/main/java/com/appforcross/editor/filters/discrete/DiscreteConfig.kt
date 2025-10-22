@@ -1,6 +1,7 @@
 package com.appforcross.editor.filters.discrete
 
-import com.appforcross.editor.filters.discrete.MoireSuppressor.Mode
+/** Публичный enum режимов подавления моирé для использования в конфиге и API. */
+enum class MoireMode { AUTO, NOTCH, DOWNSCALE, MEDIAN, OFF }
 
 /**
  * Configuration block for the discrete document filter pipeline.
@@ -30,7 +31,8 @@ data class BinarizationConfig(
 /** Configuration for the moiré suppression stage. */
 data class MoireConfig(
     val enabled: Boolean = true,
-    val mode: Mode = Mode.AUTO,
+    /** Публичный режим — не нарушает видимость публичного API. */
+    val mode: MoireMode = MoireMode.AUTO,
     /** Maximum lag (in pixels) inspected during autocorrelation. */
     val maxLag: Int = 12,
     /** Downscale factor used when the stage selects the downscale strategy. */

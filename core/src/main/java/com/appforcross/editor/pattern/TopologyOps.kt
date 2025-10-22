@@ -64,6 +64,28 @@ data class TopologyMetrics(
 object TopologyOps {
     private val zoneCount = Zone.values().size
 
+    private fun buildNoCrossMask(
+        edgeMask: FloatArray,
+        width: Int,
+        height: Int,
+        baseThreshold: Float
+    ): BooleanArray {
+        val total = width * height
+        val mask = BooleanArray(total)
+        for (i in 0 until total) {
+            if (edgeMask[i] >= baseThreshold) {
+                val x = i % width
+                val y = i / width
+                mask[i] = true
+                if (x > 0) mask[i - 1] = true
+                if (x + 1 < width) mask[i + 1] = true
+                if (y > 0) mask[i - width] = true
+                if (y + 1 < height) mask[i + width] = true
+            }
+        }
+        return mask
+    }
+
     /** Локальный максимум edgeMask в окрестности (2·r+1)×(2·r+1) для консервативной защиты. */
     private fun localMaxWindow(
         edgeMask: FloatArray,
@@ -102,8 +124,10 @@ object TopologyOps {
         require(edgeMask.size == labels.size) { "edgeMask length mismatch" }
 
         val working = labels.copyOf()
-        pottsLite(working, width, height, edgeMask, params)
-        minRunMerge(working, width, height, zones, edgeMask, params, params.edgeBlockThreshold)
+        val baseThreshold = max(params.edgeBlockThreshold, EDGE_BASE_THRESHOLD).coerceIn(0f, 1f)
+        val noCrossMask = buildNoCrossMask(edgeMask, width, height, baseThreshold)
+        pottsLite(working, width, height, edgeMask, params, noCrossMask)
+        minRunMerge(working, width, height, zones, edgeMask, params, baseThreshold, noCrossMask)
         return working
     }
 
@@ -124,7 +148,8 @@ object TopologyOps {
         width: Int,
         height: Int,
         edgeMask: FloatArray,
-        params: TopologyParams
+        params: TopologyParams,
+        noCrossMask: BooleanArray
     ) {
         val tile = params.tileSize
         val halo = params.halo
@@ -143,6 +168,9 @@ object TopologyOps {
                 for (y in yStart until yEnd) {
                     for (x in xStart until xEnd) {
                         val idx = y * width + x
+                        if (noCrossMask[idx]) {
+                            continue
+                        }
                         var count = 0
                         candidate[count++] = labels[idx]
                         for (dy in -1..1) {
@@ -201,7 +229,8 @@ object TopologyOps {
         zones: IntArray,
         edgeMask: FloatArray,
         params: TopologyParams,
-        configuredThreshold: Float
+        baseThreshold: Float,
+        noCrossMask: BooleanArray
     ) {
         val total = width * height
         val visited = BooleanArray(total)
@@ -213,19 +242,6 @@ object TopologyOps {
         val boundaryLabels = IntArray(total)
         val boundaryVotes = HashMap<Int, Int>(8)
 
-        val baseThreshold = max(configuredThreshold, EDGE_BASE_THRESHOLD).coerceIn(0f, 1f)
-        val dilationOffsets = intArrayOf(0, -1, 1, -width, width)
-        val noCrossMask = BooleanArray(total)
-        for (i in 0 until total) {
-            if (edgeMask[i] >= baseThreshold) {
-                for (offset in dilationOffsets) {
-                    val n = i + offset
-                    if (n < 0 || n >= total) continue
-                    noCrossMask[n] = true
-                }
-            }
-        }
-
         fun selectThreshold(zoneId: Int): Int {
             return params.threshold(zoneId)
         }
@@ -236,6 +252,7 @@ object TopologyOps {
         var cancelledByProbe = 0
         var cancelledByVotes = 0
         var cancelledByTie = 0
+        var cancelledByNear = 0
 
         val neighborDx = intArrayOf(0, -1, 1, 0)
         val neighborDy = intArrayOf(-1, 0, 0, 1)
@@ -357,8 +374,12 @@ object TopologyOps {
                 cancelledByBarrier++
                 continue
             }
-            if (probeStrong || probeNear) {
+            if (probeStrong) {
                 cancelledByProbe++
+                continue
+            }
+            if (probeNear) {
+                cancelledByNear++
                 continue
             }
             if (boundaryVotes.isEmpty()) {
@@ -396,6 +417,7 @@ object TopologyOps {
                 "topology.merge_applied" to mergesApplied,
                 "topology.merge_cancelled_by_barrier" to cancelledByBarrier,
                 "topology.merge_cancelled_by_probe" to cancelledByProbe,
+                "topology.merge_cancelled_by_near" to cancelledByNear,
                 "topology.merge_cancelled_by_votes" to cancelledByVotes,
                 "topology.merge_cancelled_by_tie" to cancelledByTie
             )

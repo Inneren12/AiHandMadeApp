@@ -15,7 +15,7 @@ enum class Zone {
 }
 
 /** Edge barrier threshold for min-run replacement guard (in [0,1]). */
-private const val EDGE_BLOCK_THR: Float = 0.40f
+private const val EDGE_BLOCK_THR: Float = 0.35f
 
 /** Parameters controlling the topology merge. */
 data class TopologyParams(
@@ -365,11 +365,21 @@ object TopologyOps {
         height: Int,
         threshold: Float
     ): Boolean {
-        // Консервативная оценка: берём максимум по окрестностям 3×3 вокруг концов
-        // и вокруг середины отрезка между пикселями.
-        val e1 = edgeLocalMax3x3(edgeMask, width, height, x, y)
-        val e2 = edgeLocalMax3x3(edgeMask, width, height, nx, ny)
-        val em = edgeLocalMax3x3(edgeMask, width, height, (x + nx) shr 1, (y + ny) shr 1)
-        return max(e1, max(e2, em)) >= threshold
+        // Консервативная оценка: максимум edgeMask по 3×3 окрестности
+        // в нескольких пробах вдоль отрезка (t = 0, 0.25, 0.5, 0.75, 1).
+        val samples = floatArrayOf(0f, 0.25f, 0.5f, 0.75f, 1f)
+        var maxValue = 0f
+        for (t in samples) {
+            val sx = (x + t * (nx - x)).toInt()
+            val sy = (y + t * (ny - y)).toInt()
+            val localMax = edgeLocalMax3x3(edgeMask, width, height, sx, sy)
+            if (localMax > maxValue) {
+                maxValue = localMax
+                if (maxValue >= threshold) {
+                    return true
+                }
+            }
+        }
+        return maxValue >= threshold
     }
 }

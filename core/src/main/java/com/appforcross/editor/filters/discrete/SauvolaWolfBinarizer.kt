@@ -19,7 +19,12 @@ internal class SauvolaWolfBinarizer(private val config: BinarizationConfig) {
     private var smoothScratch = ByteArray(0)
     private var medianWindow = FloatArray(9)
 
-    fun apply(image: LinearImageF16, scratch: FloatArray, buffer: ByteArray): U8Mask {
+    fun apply(
+        image: LinearImageF16,
+        scratch: FloatArray,
+        buffer: ByteArray,
+        roi: RoiBounds? = null,
+    ): U8Mask {
         Logger.i(
             TAG,
             "params",
@@ -78,9 +83,27 @@ internal class SauvolaWolfBinarizer(private val config: BinarizationConfig) {
         val globalStd = sqrt(max(globalVariance / max(1, planeOffset - 1), 1e-6f))
 
         val maskData = buffer
+        val zero: Byte = 0
+        val one: Byte = 1
+        for (i in maskData.indices) {
+            maskData[i] = zero
+        }
+        val roiBounds = roi?.clampTo(width, height)
+        if (roi != null && roiBounds == null) {
+            Logger.i(
+                TAG,
+                "done",
+                mapOf("stage" to "binarize", "ms" to elapsedMs(start), "memMB" to 0, "roi" to "empty"),
+            )
+            return U8Mask(width, height, maskData.copyOf())
+        }
         val area = config.wBin * config.wBin
         for (y in 0 until height) {
             for (x in 0 until width) {
+                if (roiBounds != null && !roiBounds.contains(x, y)) {
+                    maskData[y * width + x] = zero
+                    continue
+                }
                 val sum = regionSum(integral, x, y, radius, padW)
                 val sumSq = regionSum(integralSq, x, y, radius, padW)
                 val mean = sum / area
@@ -91,14 +114,18 @@ internal class SauvolaWolfBinarizer(private val config: BinarizationConfig) {
                     Algorithm.SAUVOLA -> sauvola(mean, std)
                     Algorithm.WOLF -> wolf(mean, std, value, globalMin, globalMax, globalMean, globalStd)
                 }
-                maskData[y * width + x] = if (value >= threshold) 1 else 0
+                maskData[y * width + x] = if (value >= threshold) one else zero
             }
         }
 
         when (config.smoothing) {
-            Smoothing.BOX3 -> smooth3x3(maskData, width, height)
-            Smoothing.MEDIAN3 -> median3x3(maskData, width, height)
+            Smoothing.BOX3 -> smooth3x3(maskData, width, height, roiBounds)
+            Smoothing.MEDIAN3 -> median3x3(maskData, width, height, roiBounds)
             Smoothing.NONE -> Unit
+        }
+
+        if (roiBounds != null) {
+            zeroOutside(maskData, width, height, roiBounds)
         }
 
         val memBytes = ((padded.size + integral.size + integralSq.size + planeOffset).toLong() * 4L) +
@@ -196,32 +223,38 @@ internal class SauvolaWolfBinarizer(private val config: BinarizationConfig) {
         return d - b - c + a
     }
 
-    private fun smooth3x3(mask: ByteArray, width: Int, height: Int) {
+    private fun smooth3x3(mask: ByteArray, width: Int, height: Int, roi: RoiBounds?) {
         ensureSmoothScratch(mask.size)
         val copy = smoothScratch
         for (i in mask.indices) {
             copy[i] = mask[i]
         }
-        for (y in 0 until height) {
-            for (x in 0 until width) {
+        val roiBounds = roi?.clampTo(width, height) ?: RoiBounds.full(width, height)
+        val zero: Byte = 0
+        val one: Byte = 1
+        for (y in roiBounds.top until roiBounds.bottom) {
+            for (x in roiBounds.left until roiBounds.right) {
                 var sum = 0
                 var count = 0
-                for (dy in -1..1) {
-                    val yy = y + dy
-                    if (yy < 0 || yy >= height) continue
-                    for (dx in -1..1) {
-                        val xx = x + dx
-                        if (xx < 0 || xx >= width) continue
+                val y0 = max(y - 1, roiBounds.top)
+                val y1 = min(y + 1, roiBounds.bottom - 1)
+                val x0 = max(x - 1, roiBounds.left)
+                val x1 = min(x + 1, roiBounds.right - 1)
+                for (yy in y0..y1) {
+                    for (xx in x0..x1) {
                         sum += copy[yy * width + xx].toInt()
                         count++
                     }
                 }
-                mask[y * width + x] = if (sum * 2 >= count) 1 else 0
+                mask[y * width + x] = if (sum * 2 >= count) one else zero
             }
+        }
+        if (roi != null) {
+            zeroOutside(mask, width, height, roiBounds)
         }
     }
 
-    private fun median3x3(mask: ByteArray, width: Int, height: Int) {
+    private fun median3x3(mask: ByteArray, width: Int, height: Int, roi: RoiBounds?) {
         ensureSmoothScratch(mask.size)
         val copy = smoothScratch
         for (i in mask.indices) {
@@ -231,18 +264,38 @@ internal class SauvolaWolfBinarizer(private val config: BinarizationConfig) {
             medianWindow = FloatArray(9)
         }
         val window = medianWindow
-        for (y in 0 until height) {
-            for (x in 0 until width) {
+        val roiBounds = roi?.clampTo(width, height) ?: RoiBounds.full(width, height)
+        val zero: Byte = 0
+        val one: Byte = 1
+        for (y in roiBounds.top until roiBounds.bottom) {
+            for (x in roiBounds.left until roiBounds.right) {
                 var idx = 0
-                for (dy in -1..1) {
-                    val yy = (y + dy).coerceIn(0, height - 1)
-                    for (dx in -1..1) {
-                        val xx = (x + dx).coerceIn(0, width - 1)
+                val y0 = max(y - 1, roiBounds.top)
+                val y1 = min(y + 1, roiBounds.bottom - 1)
+                val x0 = max(x - 1, roiBounds.left)
+                val x1 = min(x + 1, roiBounds.right - 1)
+                for (yy in y0..y1) {
+                    for (xx in x0..x1) {
                         window[idx++] = copy[yy * width + xx].toFloat()
                     }
                 }
                 Arrays.sort(window, 0, idx)
-                mask[y * width + x] = if (window[idx / 2] >= 0.5f) 1 else 0
+                mask[y * width + x] = if (window[idx / 2] >= 0.5f) one else zero
+            }
+        }
+        if (roi != null) {
+            zeroOutside(mask, width, height, roiBounds)
+        }
+    }
+
+    private fun zeroOutside(mask: ByteArray, width: Int, height: Int, roi: RoiBounds) {
+        val zero: Byte = 0
+        for (y in 0 until height) {
+            val row = y * width
+            for (x in 0 until width) {
+                if (!roi.contains(x, y)) {
+                    mask[row + x] = zero
+                }
             }
         }
     }

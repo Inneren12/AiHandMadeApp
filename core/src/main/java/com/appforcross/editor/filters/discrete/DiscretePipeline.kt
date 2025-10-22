@@ -22,7 +22,7 @@ class DiscretePipeline(private val config: DiscreteConfig = DiscreteConfig()) {
     private var byteScratch = ByteArray(0)
     private var byteScratch2 = ByteArray(0)
 
-    fun run(input: LinearImageF16): Output {
+    fun run(input: LinearImageF16, roi: RoiBounds? = null): Output {
         val start = System.nanoTime()
         Logger.i(
             TAG,
@@ -59,9 +59,12 @@ class DiscretePipeline(private val config: DiscreteConfig = DiscreteConfig()) {
 
         ensureCapacity(input.width, input.height)
 
+        val roiBounds = roi?.clampTo(input.width, input.height)
+
         val moireImage = moire.apply(input, floatScratch, floatScratch2, floatScratch3)
-        val mask = binarizer.apply(moireImage, floatScratch, byteScratch)
-        val morph = morphology.apply(mask, byteScratch, byteScratch2)
+        val mask = binarizer.apply(moireImage, floatScratch, byteScratch, roiBounds)
+        val morph = morphology.apply(mask, byteScratch, byteScratch2, roiBounds)
+        val sanitizedMask = if (roiBounds != null) clampOutsideRoi(morph.mask, roiBounds) else morph.mask
 
         Logger.i(
             TAG,
@@ -73,7 +76,23 @@ class DiscretePipeline(private val config: DiscreteConfig = DiscreteConfig()) {
                 "memMB" to ((floatScratch.size + floatScratch2.size + floatScratch3.size) * 4 + (byteScratch.size + byteScratch2.size)) / 1_048_576,
             ),
         )
-        return Output(moireImage, morph.mask, morph.roiAccepted)
+        return Output(moireImage, sanitizedMask, morph.roiAccepted)
+    }
+
+    private fun clampOutsideRoi(mask: U8Mask, roi: RoiBounds): U8Mask {
+        val width = mask.width
+        val height = mask.height
+        val data = mask.data
+        val zero: Byte = 0
+        for (y in 0 until height) {
+            val row = y * width
+            for (x in 0 until width) {
+                if (!roi.contains(x, y)) {
+                    data[row + x] = zero
+                }
+            }
+        }
+        return mask
     }
 
     private fun ensureCapacity(width: Int, height: Int) {

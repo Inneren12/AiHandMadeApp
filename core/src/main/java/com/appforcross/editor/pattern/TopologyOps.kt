@@ -232,6 +232,7 @@ object TopologyOps {
                 for (dy in -1..1) {
                     for (dx in -1..1) {
                         if (dx == 0 && dy == 0) continue
+                        if (abs(dx) + abs(dy) != 1) continue // 4-соседи без диагоналей
                         val nx = x + dx
                         val ny = y + dy
                         if (nx !in 0 until width || ny !in 0 until height) continue
@@ -371,21 +372,37 @@ object TopologyOps {
         height: Int,
         threshold: Float
     ): Boolean {
-        // Консервативная оценка: максимум edgeMask по 5×5 окрестности
-        // в нескольких пробах вдоль отрезка (t = 0, 0.25, 0.5, 0.75, 1).
-        val samples = floatArrayOf(0f, 0.25f, 0.5f, 0.75f, 1f)
-        var maxValue = 0f
-        for (t in samples) {
-            val sx = (x + t * (nx - x)).toInt()
-            val sy = (y + t * (ny - y)).toInt()
-            val localMax = localMax5x5(edgeMask, width, height, sx, sy)
-            if (localMax > maxValue) {
-                maxValue = localMax
-                if (maxValue >= threshold) {
-                    return true
+        val dx = nx - x
+        val dy = ny - y
+        val manhattan = abs(dx) + abs(dy)
+        if (manhattan == 0) {
+            return localMax5x5(edgeMask, width, height, x, y) >= threshold
+        }
+        if (manhattan == 1) {
+            val samples = floatArrayOf(0f, 0.25f, 0.5f, 0.75f, 1f)
+            var maxValue = 0f
+            for (t in samples) {
+                val sx = (x + t * dx).toInt()
+                val sy = (y + t * dy).toInt()
+                val localMax = localMax5x5(edgeMask, width, height, sx, sy)
+                if (localMax > maxValue) {
+                    maxValue = localMax
+                    if (maxValue >= threshold) {
+                        return true
+                    }
                 }
             }
+            return maxValue >= threshold
         }
-        return maxValue >= threshold
+        if (abs(dx) == 1 && abs(dy) == 1 && manhattan == 2) {
+            // Диагональный сосед: запрещаем corner-cut, пробуем два ортогональных пути.
+            if (hasStrongEdgeBetween(x, y, nx, y, edgeMask, width, height, threshold)) {
+                return true
+            }
+            if (hasStrongEdgeBetween(x, y, x, ny, edgeMask, width, height, threshold)) {
+                return true
+            }
+        }
+        return false
     }
 }

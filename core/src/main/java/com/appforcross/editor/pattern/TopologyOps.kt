@@ -352,7 +352,9 @@ object TopologyOps {
                                 height
                             )
                             barrierFlags[boundaryIndex] = noCrossMask[idx] || noCrossMask[nIdx]
-                            val neighborLabel = originalLabels[nIdx]
+                            // Для голосования используем текущие (working) метки,
+                            // чтобы Potts-сглаживание помогало решать конфетти-кейсы.
+                            val neighborLabel = labels[nIdx]
                             boundaryLabels[boundaryIndex] = if (neighborLabel >= 0) neighborLabel else -1
                             perimeterCount++
                         }
@@ -457,8 +459,8 @@ object TopologyOps {
 
             val replacement = contenders.keys.first()
             lastWinnerLabel = replacement
+            // Если победитель совпадает с исходной меткой компоненты — это no-op.
             if (replacement == componentLabel) {
-                restoreComponent(size, componentLabel)
                 continue
             }
             var changed = false

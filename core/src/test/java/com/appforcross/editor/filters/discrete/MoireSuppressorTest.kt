@@ -22,12 +22,13 @@ class MoireSuppressorTest {
         }
         val image = LinearImageF16(width, height, 1, data)
         val suppressor = MoireSuppressor(
-            MoireConfig(enabled = true, mode = MoireSuppressor.Mode.NOTCH, maxLag = 4, detectionThreshold = 0.3f),
+            MoireConfig(enabled = true, mode = MoireMode.NOTCH, maxLag = 4, detectionThreshold = 0.3f),
         )
         val scratch = FloatArray(width * height)
         val scratch2 = FloatArray(width * height)
+        val scratch3 = FloatArray(width * height)
 
-        val processed = suppressor.apply(image, scratch, scratch2)
+        val processed = suppressor.apply(image, scratch, scratch2, scratch3)
 
         val originalVariance = variance(image.data, width * height)
         val processedVariance = variance(processed.data, width * height)

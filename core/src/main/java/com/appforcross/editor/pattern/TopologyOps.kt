@@ -2,6 +2,7 @@ package com.appforcross.editor.pattern
 
 import com.appforcross.editor.logging.Logger
 import java.util.HashMap
+import kotlin.jvm.Volatile
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -60,9 +61,26 @@ data class TopologyMetrics(
     val runMedian: Float
 )
 
+internal data class MergeGuardStats(
+    val components: Int = 0,
+    val mergesApplied: Int = 0,
+    val cancelledByBarrier: Int = 0,
+    val cancelledByProbe: Int = 0,
+    val cancelledByNear: Int = 0,
+    val cancelledByVotes: Int = 0,
+    val cancelledByTie: Int = 0,
+    val votesWinner: Int = 0,
+    val votesOriginal: Int = 0,
+    val votesWinnerLabel: Int = -1
+)
+
 /** Helper operations to clean topology maps. */
 object TopologyOps {
     private val zoneCount = Zone.values().size
+    @Volatile
+    private var latestGuardStats: MergeGuardStats = MergeGuardStats()
+
+    internal fun lastGuardStats(): MergeGuardStats = latestGuardStats
 
     private fun buildNoCrossMask(
         edgeMask: FloatArray,
@@ -265,6 +283,9 @@ object TopologyOps {
         var cancelledByVotes = 0
         var cancelledByTie = 0
         var cancelledByNear = 0
+        var peakWinnerVotes = 0
+        var peakOriginalVotes = 0
+        var lastWinnerLabel = -1
 
         val neighborDx = intArrayOf(0, -1, 1, 0)
         val neighborDy = intArrayOf(-1, 0, 0, 1)
@@ -331,7 +352,7 @@ object TopologyOps {
                                 height
                             )
                             barrierFlags[boundaryIndex] = noCrossMask[idx] || noCrossMask[nIdx]
-                            val neighborLabel = labels[nIdx]
+                            val neighborLabel = originalLabels[nIdx]
                             boundaryLabels[boundaryIndex] = if (neighborLabel >= 0) neighborLabel else -1
                             perimeterCount++
                         }
@@ -415,6 +436,13 @@ object TopologyOps {
             }
 
             val maxVotes = boundaryVotes.values.maxOrNull() ?: 0
+            val originalVotes = boundaryVotes[componentLabel] ?: 0
+            if (maxVotes > peakWinnerVotes) {
+                peakWinnerVotes = maxVotes
+            }
+            if (originalVotes > peakOriginalVotes) {
+                peakOriginalVotes = originalVotes
+            }
             if (maxVotes < MIN_VOTES_FOR_MERGE) {
                 cancelledByVotes++
                 restoreComponent(size, componentLabel)
@@ -428,6 +456,11 @@ object TopologyOps {
             }
 
             val replacement = contenders.keys.first()
+            lastWinnerLabel = replacement
+            if (replacement == componentLabel) {
+                restoreComponent(size, componentLabel)
+                continue
+            }
             var changed = false
             for (i in 0 until size) {
                 val idx = members[i]
@@ -441,17 +474,32 @@ object TopologyOps {
             }
         }
 
+        latestGuardStats = MergeGuardStats(
+            components = components,
+            mergesApplied = mergesApplied,
+            cancelledByBarrier = cancelledByBarrier,
+            cancelledByProbe = cancelledByProbe,
+            cancelledByNear = cancelledByNear,
+            cancelledByVotes = cancelledByVotes,
+            cancelledByTie = cancelledByTie,
+            votesWinner = peakWinnerVotes,
+            votesOriginal = peakOriginalVotes,
+            votesWinnerLabel = lastWinnerLabel
+        )
         Logger.i(
             "TOPO",
             "merge_guard",
             mapOf(
-                "topology.merge.components" to components,
-                "topology.merge_applied" to mergesApplied,
-                "topology.merge_cancelled_by_barrier" to cancelledByBarrier,
-                "topology.merge_cancelled_by_probe" to cancelledByProbe,
-                "topology.merge_cancelled_by_near" to cancelledByNear,
-                "topology.merge_cancelled_by_votes" to cancelledByVotes,
-                "topology.merge_cancelled_by_tie" to cancelledByTie
+                "topology.merge.components" to latestGuardStats.components,
+                "topology.merge_applied" to latestGuardStats.mergesApplied,
+                "topology.merge_cancelled_by_barrier" to latestGuardStats.cancelledByBarrier,
+                "topology.merge_cancelled_by_probe" to latestGuardStats.cancelledByProbe,
+                "topology.merge_cancelled_by_near" to latestGuardStats.cancelledByNear,
+                "topology.merge_cancelled_by_votes" to latestGuardStats.cancelledByVotes,
+                "topology.merge_cancelled_by_tie" to latestGuardStats.cancelledByTie,
+                "topology.votes_winner" to latestGuardStats.votesWinner,
+                "topology.votes_original" to latestGuardStats.votesOriginal,
+                "topology.votes_winner_label" to latestGuardStats.votesWinnerLabel
             )
         )
     }

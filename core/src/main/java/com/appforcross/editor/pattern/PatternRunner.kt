@@ -54,6 +54,7 @@ class PatternRunner(
         )
 
         val merged = TopologyOps.merge(labels, width, height, zones, edgeMask, params)
+        val guardStats = TopologyOps.lastGuardStats()
         val afterMetrics = TopologyOps.computeMetrics(merged, width, height)
         Logger.i(
             "TOPO",
@@ -64,7 +65,13 @@ class PatternRunner(
                 "topology.run_median" to "%.2f".format(afterMetrics.runMedian),
                 "topology.delta.tc" to "%.2f".format(afterMetrics.threadChangesPer100 - beforeMetrics.threadChangesPer100),
                 "topology.delta.islands" to "%.2f".format(afterMetrics.smallIslandsPer1000 - beforeMetrics.smallIslandsPer1000),
-                "topology.delta.run_median" to "%.2f".format(afterMetrics.runMedian - beforeMetrics.runMedian)
+                "topology.delta.run_median" to "%.2f".format(afterMetrics.runMedian - beforeMetrics.runMedian),
+                "topology.merge_cancelled_by_barrier" to guardStats.cancelledByBarrier,
+                "topology.merge_cancelled_by_near" to guardStats.cancelledByNear,
+                "topology.merge_cancelled_by_votes" to guardStats.cancelledByVotes,
+                "topology.merge_cancelled_by_tie" to guardStats.cancelledByTie,
+                "topology.votes_winner" to guardStats.votesWinner,
+                "topology.votes_original" to guardStats.votesOriginal
             )
         )
 

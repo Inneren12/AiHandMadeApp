@@ -11,10 +11,8 @@ import com.appforcross.editor.types.LinearImageF16
 
 internal class MoireSuppressor(private val config: MoireConfig) {
 
-    enum class Mode { AUTO, NOTCH, DOWNSCALE, MEDIAN, OFF }
-
     data class Decision(
-        val mode: Mode,
+        val mode: MoireMode,
         val freqX: Int,
         val freqY: Int,
         val scoreX: Float,
@@ -30,7 +28,7 @@ internal class MoireSuppressor(private val config: MoireConfig) {
             "params",
             mapOf(
                 "stage" to "moire",
-                "disc.enabled" to (config.mode != Mode.OFF && config.enabled),
+                "disc.enabled" to (config.mode != MoireMode.OFF && config.enabled),
                 "disc.moire.enabled" to config.enabled,
                 "disc.moire.mode" to config.mode.name.lowercase(),
                 "disc.moire.maxLag" to config.maxLag,
@@ -42,8 +40,12 @@ internal class MoireSuppressor(private val config: MoireConfig) {
         )
 
         val start = System.nanoTime()
-        if (!config.enabled || config.mode == Mode.OFF) {
-            Logger.i(TAG, "done", mapOf("stage" to "moire", "mode" to Mode.OFF.name, "ms" to elapsedMs(start), "memMB" to 0))
+        if (!config.enabled || config.mode == MoireMode.OFF) {
+            Logger.i(
+                TAG,
+                "done",
+                mapOf("stage" to "moire", "mode" to MoireMode.OFF.name, "ms" to elapsedMs(start), "memMB" to 0),
+            )
             return image
         }
 
@@ -59,15 +61,15 @@ internal class MoireSuppressor(private val config: MoireConfig) {
 
         val auto = autoDecision(scratch, width, height)
         val decision = when (config.mode) {
-            Mode.AUTO -> auto
-            Mode.NOTCH -> auto.copy(mode = Mode.NOTCH)
-            Mode.DOWNSCALE -> auto.copy(mode = Mode.DOWNSCALE)
-            Mode.MEDIAN -> auto.copy(mode = Mode.MEDIAN)
-            Mode.OFF -> auto.copy(mode = Mode.OFF)
+            MoireMode.AUTO -> auto
+            MoireMode.NOTCH -> auto.copy(mode = MoireMode.NOTCH)
+            MoireMode.DOWNSCALE -> auto.copy(mode = MoireMode.DOWNSCALE)
+            MoireMode.MEDIAN -> auto.copy(mode = MoireMode.MEDIAN)
+            MoireMode.OFF -> auto.copy(mode = MoireMode.OFF)
         }
 
         val processed = when (decision.mode) {
-            Mode.NOTCH -> {
+            MoireMode.NOTCH -> {
                 notchFilter(
                     scratch,
                     work,
@@ -79,15 +81,15 @@ internal class MoireSuppressor(private val config: MoireConfig) {
                 )
                 work
             }
-            Mode.DOWNSCALE -> {
+            MoireMode.DOWNSCALE -> {
                 downscaleRoute(scratch, work, aux, width, height)
             }
-            Mode.MEDIAN -> {
+            MoireMode.MEDIAN -> {
                 medianFilter(scratch, work, width, height, config.medianSize)
                 work
             }
-            Mode.OFF -> scratch
-            Mode.AUTO -> scratch
+            MoireMode.OFF -> scratch
+            MoireMode.AUTO -> scratch
         }
 
         val outData = image.data.copyOf()
@@ -115,7 +117,7 @@ internal class MoireSuppressor(private val config: MoireConfig) {
 
     private fun autoDecision(data: FloatArray, width: Int, height: Int): Decision {
         val maxLag = min(config.maxLag, min(width, height) / 2)
-        if (maxLag <= 1) return Decision(Mode.MEDIAN, 0, 0, 0f, 0f)
+        if (maxLag <= 1) return Decision(MoireMode.MEDIAN, 0, 0, 0f, 0f)
         val horizontal = FloatArray(maxLag + 1)
         val vertical = FloatArray(maxLag + 1)
         val mean = data.average().toFloat()
@@ -124,7 +126,7 @@ internal class MoireSuppressor(private val config: MoireConfig) {
             acc + d * d
         } / max(1, data.size - 1)
         val std = sqrt(max(variance, 1e-6f))
-        if (std <= 1e-6f) return Decision(Mode.MEDIAN, 0, 0, 0f, 0f)
+        if (std <= 1e-6f) return Decision(MoireMode.MEDIAN, 0, 0, 0f, 0f)
         for (lag in 1..maxLag) {
             var hAcc = 0f
             var hCount = 0
@@ -171,10 +173,10 @@ internal class MoireSuppressor(private val config: MoireConfig) {
 
         val dominantScore = max(bestScoreX, bestScoreY)
         if (dominantScore < config.detectionThreshold) {
-            return Decision(Mode.MEDIAN, 0, 0, bestScoreX, bestScoreY)
+            return Decision(MoireMode.MEDIAN, 0, 0, bestScoreX, bestScoreY)
         }
         val dominantLag = if (bestScoreX >= bestScoreY) bestLagX else bestLagY
-        val mode = if (dominantLag <= 4) Mode.NOTCH else Mode.DOWNSCALE
+        val mode = if (dominantLag <= 4) MoireMode.NOTCH else MoireMode.DOWNSCALE
         val freqX = if (bestScoreX >= config.detectionThreshold) bestLagX else 0
         val freqY = if (bestScoreY >= config.detectionThreshold) bestLagY else 0
         return Decision(mode, freqX, freqY, bestScoreX, bestScoreY)

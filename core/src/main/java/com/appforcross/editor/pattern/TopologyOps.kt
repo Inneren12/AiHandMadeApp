@@ -89,7 +89,7 @@ object TopologyOps {
 
         val working = labels.copyOf()
         pottsLite(working, width, height, edgeMask, params)
-        minRunMerge(working, width, height, zones, edgeMask, params)
+        minRunMerge(working, width, height, zones, edgeMask, params, params.edgeBlockThreshold)
         return working
     }
 
@@ -186,7 +186,8 @@ object TopologyOps {
         height: Int,
         zones: IntArray,
         edgeMask: FloatArray,
-        params: TopologyParams
+        params: TopologyParams,
+        edgeThreshold: Float
     ) {
         val total = width * height
         val visited = BooleanArray(total)
@@ -224,7 +225,7 @@ object TopologyOps {
                 val x = idx % width
                 val y = idx / width
                 zoneCounts[zones[idx].coerceIn(0, zoneCount - 1)]++
-                if (!protectedByEdge && localMax5x5(edgeMask, width, height, x, y) >= params.edgeBlockThreshold) {
+                if (!protectedByEdge && localMax5x5(edgeMask, width, height, x, y) >= edgeThreshold) {
                     protectedByEdge = true
                 }
 
@@ -243,7 +244,7 @@ object TopologyOps {
                                 queue[tail++] = nIdx
                             }
                         } else {
-                            if (hasStrongEdgeBetween(x, y, nx, ny, edgeMask, width, height, params.edgeBlockThreshold)) {
+                            if (hasStrongEdgeBetween(x, y, nx, ny, edgeMask, width, height, edgeThreshold)) {
                                 protectedByEdge = true
                                 continue
                             }
@@ -255,13 +256,13 @@ object TopologyOps {
                                     edgeMask,
                                     width,
                                     height,
-                                    params.edgeBlockThreshold * 0.9f,
+                                    edgeThreshold * 0.9f,
                                 )
                             ) {
                                 nearEdgeHit = true
                             }
                             // Периметральная защита: если у соседней метки локальный максимум ≥ threshold — блокируем замену.
-                            if (!protectedByEdge && localMax5x5(edgeMask, width, height, nx, ny) >= params.edgeBlockThreshold) {
+                            if (!protectedByEdge && localMax5x5(edgeMask, width, height, nx, ny) >= edgeThreshold) {
                                 protectedByEdge = true
                                 continue
                             }

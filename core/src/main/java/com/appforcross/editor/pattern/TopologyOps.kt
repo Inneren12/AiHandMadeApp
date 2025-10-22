@@ -1,5 +1,6 @@
 package com.appforcross.editor.pattern
 
+import com.appforcross.editor.logging.Logger
 import java.util.HashMap
 import kotlin.math.abs
 import kotlin.math.max
@@ -14,11 +15,21 @@ enum class Zone {
     FILL
 }
 
-/** Edge barrier threshold for min-run replacement guard (in [0,1]). */
-private const val EDGE_BLOCK_THR: Float = 0.25f
+/** Edge barrier base threshold for min-run replacement guard (in [0,1]). */
+internal const val EDGE_BASE_THRESHOLD: Float = 0.30f
+
+private const val EDGE_NEAR_RATIO: Float = 0.95f
+
+internal const val EDGE_WINDOW_RADIUS: Int = 3
+
+internal const val EDGE_WINDOW_SIZE: Int = EDGE_WINDOW_RADIUS * 2 + 1
+
+internal const val EDGE_PROBE_SAMPLES: Int = 9
+
+internal const val TOPO_CONNECTIVITY: Int = 4
 
 /** Минимум голосов большинства, чтобы перекрасить короткий ран. */
-private const val MIN_VOTES_FOR_MERGE: Int = 2
+internal const val MIN_VOTES_FOR_MERGE: Int = 2
 
 /** Parameters controlling the topology merge. */
 data class TopologyParams(
@@ -26,7 +37,7 @@ data class TopologyParams(
     val halo: Int = 1,
     val minRunThresholds: IntArray = intArrayOf(2, 3, 3, 4, 3),
     /* Edge barrier threshold for min-run replacement guard (in [0,1]). */
-    val edgeBlockThreshold: Float = EDGE_BLOCK_THR
+    val edgeBlockThreshold: Float = EDGE_BASE_THRESHOLD
 ) {
     init {
         require(tileSize > 0) { "tileSize must be positive" }
@@ -53,8 +64,8 @@ data class TopologyMetrics(
 object TopologyOps {
     private val zoneCount = Zone.values().size
 
-    /** Локальный максимум edgeMask в окрестности 7×7 (радиус=3) для консервативной защиты. */
-    private fun localMax7x7(
+    /** Локальный максимум edgeMask в окрестности (2·r+1)×(2·r+1) для консервативной защиты. */
+    private fun localMaxWindow(
         edgeMask: FloatArray,
         width: Int,
         height: Int,
@@ -64,8 +75,8 @@ object TopologyOps {
         var maxValue = 0f
         val cx = x.coerceIn(0, width - 1)
         val cy = y.coerceIn(0, height - 1)
-        for (dy in -3..3) {
-            for (dx in -3..3) {
+        for (dy in -EDGE_WINDOW_RADIUS..EDGE_WINDOW_RADIUS) {
+            for (dx in -EDGE_WINDOW_RADIUS..EDGE_WINDOW_RADIUS) {
                 val px = (cx + dx).coerceIn(0, width - 1)
                 val py = (cy + dy).coerceIn(0, height - 1)
                 val value = edgeMask[py * width + px]
@@ -190,17 +201,44 @@ object TopologyOps {
         zones: IntArray,
         edgeMask: FloatArray,
         params: TopologyParams,
-        edgeThreshold: Float
+        configuredThreshold: Float
     ) {
         val total = width * height
         val visited = BooleanArray(total)
         val queue = IntArray(total)
         val members = IntArray(total)
+        val perimeterValues = FloatArray(total)
+        val probeValues = FloatArray(total)
+        val barrierFlags = BooleanArray(total)
+        val boundaryLabels = IntArray(total)
         val boundaryVotes = HashMap<Int, Int>(8)
+
+        val baseThreshold = max(configuredThreshold, EDGE_BASE_THRESHOLD).coerceIn(0f, 1f)
+        val dilationOffsets = intArrayOf(0, -1, 1, -width, width)
+        val noCrossMask = BooleanArray(total)
+        for (i in 0 until total) {
+            if (edgeMask[i] >= baseThreshold) {
+                for (offset in dilationOffsets) {
+                    val n = i + offset
+                    if (n < 0 || n >= total) continue
+                    noCrossMask[n] = true
+                }
+            }
+        }
 
         fun selectThreshold(zoneId: Int): Int {
             return params.threshold(zoneId)
         }
+
+        var components = 0
+        var mergesApplied = 0
+        var cancelledByBarrier = 0
+        var cancelledByProbe = 0
+        var cancelledByVotes = 0
+        var cancelledByTie = 0
+
+        val neighborDx = intArrayOf(0, -1, 1, 0)
+        val neighborDy = intArrayOf(-1, 0, 0, 1)
 
         for (start in 0 until total) {
             if (visited[start]) continue
@@ -210,15 +248,15 @@ object TopologyOps {
                 continue
             }
 
+            components++
+
             var head = 0
             var tail = 0
             queue[tail++] = start
             visited[start] = true
 
             var size = 0
-            var protectedByEdge = false
-            var nearEdgeHit = false
-            boundaryVotes.clear()
+            var perimeterCount = 0
             val zoneCounts = IntArray(zoneCount)
 
             while (head < tail) {
@@ -228,51 +266,39 @@ object TopologyOps {
                 val x = idx % width
                 val y = idx / width
                 zoneCounts[zones[idx].coerceIn(0, zoneCount - 1)]++
-                if (!protectedByEdge && localMax7x7(edgeMask, width, height, x, y) >= edgeThreshold) {
-                    protectedByEdge = true
-                }
 
-                for (dy in -1..1) {
-                    for (dx in -1..1) {
-                        if (dx == 0 && dy == 0) continue
-                        if (abs(dx) + abs(dy) != 1) continue // 4-соседи без диагоналей
-                        val nx = x + dx
-                        val ny = y + dy
-                        if (nx !in 0 until width || ny !in 0 until height) continue
+                for (dir in neighborDx.indices) {
+                    val nx = x + neighborDx[dir]
+                    val ny = y + neighborDy[dir]
+                    if (nx !in 0 until width || ny !in 0 until height) continue
 
-                        val nIdx = ny * width + nx
-                        val nLabel = labels[nIdx]
-                        if (nLabel == label) {
-                            if (!visited[nIdx]) {
-                                visited[nIdx] = true
-                                queue[tail++] = nIdx
-                            }
-                        } else {
-                            if (hasStrongEdgeBetween(x, y, nx, ny, edgeMask, width, height, edgeThreshold)) {
-                                protectedByEdge = true
-                                continue
-                            }
-                            if (!nearEdgeHit && hasStrongEdgeBetween(
-                                    x,
-                                    y,
-                                    nx,
-                                    ny,
-                                    edgeMask,
-                                    width,
-                                    height,
-                                    edgeThreshold * 0.95f,
-                                )
-                            ) {
-                                nearEdgeHit = true
-                            }
-                            // Периметральная защита: если у соседней метки локальный максимум ≥ threshold — блокируем замену.
-                            if (!protectedByEdge && localMax7x7(edgeMask, width, height, nx, ny) >= edgeThreshold) {
-                                protectedByEdge = true
-                                continue
-                            }
-                            if (nLabel >= 0) {
-                                boundaryVotes[nLabel] = (boundaryVotes[nLabel] ?: 0) + 1
-                            }
+                    val nIdx = ny * width + nx
+                    val nLabel = labels[nIdx]
+                    if (nLabel == label) {
+                        if (!visited[nIdx]) {
+                            visited[nIdx] = true
+                            queue[tail++] = nIdx
+                        }
+                    } else {
+                        if (perimeterCount < total) {
+                            val boundaryIndex = perimeterCount
+                            val edgeValue = max(
+                                localMaxWindow(edgeMask, width, height, x, y),
+                                localMaxWindow(edgeMask, width, height, nx, ny)
+                            )
+                            perimeterValues[boundaryIndex] = edgeValue
+                            probeValues[boundaryIndex] = probeEdgeBetween(
+                                x,
+                                y,
+                                nx,
+                                ny,
+                                edgeMask,
+                                width,
+                                height
+                            )
+                            barrierFlags[boundaryIndex] = noCrossMask[idx] || noCrossMask[nIdx]
+                            boundaryLabels[boundaryIndex] = if (nLabel >= 0) nLabel else -1
+                            perimeterCount++
                         }
                     }
                 }
@@ -284,18 +310,74 @@ object TopologyOps {
                 continue
             }
 
-            if (protectedByEdge || nearEdgeHit || boundaryVotes.isEmpty()) {
+            if (perimeterCount == 0) {
+                cancelledByVotes++
                 continue
             }
 
-            val best = boundaryVotes.entries
-                .maxWithOrNull(compareBy<Map.Entry<Int, Int>>({ it.value }, { -it.key }))
+            val perimeterCopy = perimeterValues.copyOfRange(0, perimeterCount)
+            perimeterCopy.sort()
+            val p90Index = ((perimeterCount - 1) * 0.9f).toInt().coerceIn(0, perimeterCount - 1)
+            val adaptiveThreshold = max(baseThreshold, perimeterCopy[p90Index])
+            val nearThreshold = adaptiveThreshold * EDGE_NEAR_RATIO
 
-            if (best == null || best.value < MIN_VOTES_FOR_MERGE) {
+            var barrierHit = false
+            var perimeterStrong = false
+            var probeStrong = false
+            var probeNear = false
+            boundaryVotes.clear()
+
+            for (i in 0 until perimeterCount) {
+                val neighborLabel = boundaryLabels[i]
+                val edgeValue = perimeterValues[i]
+                val probeValue = probeValues[i]
+                val blocked = barrierFlags[i]
+                if (blocked) {
+                    barrierHit = true
+                    continue
+                }
+                if (edgeValue >= adaptiveThreshold) {
+                    perimeterStrong = true
+                    continue
+                }
+                if (probeValue >= adaptiveThreshold) {
+                    probeStrong = true
+                    continue
+                }
+                if (probeValue >= nearThreshold) {
+                    probeNear = true
+                    continue
+                }
+                if (neighborLabel >= 0) {
+                    boundaryVotes[neighborLabel] = (boundaryVotes[neighborLabel] ?: 0) + 1
+                }
+            }
+
+            if (barrierHit || perimeterStrong) {
+                cancelledByBarrier++
+                continue
+            }
+            if (probeStrong || probeNear) {
+                cancelledByProbe++
+                continue
+            }
+            if (boundaryVotes.isEmpty()) {
+                cancelledByVotes++
                 continue
             }
 
-            val replacement = best.key
+            val maxVotes = boundaryVotes.values.maxOrNull() ?: 0
+            if (maxVotes < MIN_VOTES_FOR_MERGE) {
+                cancelledByVotes++
+                continue
+            }
+            val contenders = boundaryVotes.filterValues { it == maxVotes }
+            if (contenders.size != 1) {
+                cancelledByTie++
+                continue
+            }
+
+            val replacement = contenders.keys.first()
             if (replacement == label) {
                 continue
             }
@@ -303,7 +385,21 @@ object TopologyOps {
             for (i in 0 until size) {
                 labels[members[i]] = replacement
             }
+            mergesApplied++
         }
+
+        Logger.i(
+            "TOPO",
+            "merge_guard",
+            mapOf(
+                "topology.merge.components" to components,
+                "topology.merge_applied" to mergesApplied,
+                "topology.merge_cancelled_by_barrier" to cancelledByBarrier,
+                "topology.merge_cancelled_by_probe" to cancelledByProbe,
+                "topology.merge_cancelled_by_votes" to cancelledByVotes,
+                "topology.merge_cancelled_by_tie" to cancelledByTie
+            )
+        )
     }
 
     private fun countThreadChanges(labels: IntArray, width: Int, height: Int): Int {
@@ -369,49 +465,43 @@ object TopologyOps {
         return if (runs.size % 2 == 1) runs[mid].toFloat() else 0.5f * (runs[mid - 1] + runs[mid])
     }
 
-    private fun hasStrongEdgeBetween(
+    private fun probeEdgeBetween(
         x: Int,
         y: Int,
         nx: Int,
         ny: Int,
         edgeMask: FloatArray,
         width: Int,
-        height: Int,
-        threshold: Float
-    ): Boolean {
+        height: Int
+    ): Float {
         val dx = nx - x
         val dy = ny - y
         val manhattan = abs(dx) + abs(dy)
         if (manhattan == 0) {
-            return localMax7x7(edgeMask, width, height, x, y) >= threshold
+            return localMaxWindow(edgeMask, width, height, x, y)
         }
         if (manhattan == 1) {
-            val samples = floatArrayOf(0f, 0.125f, 0.25f, 0.375f, 0.5f, 0.625f, 0.75f, 0.875f, 1f)
             var maxValue = 0f
-            for (t in samples) {
+            val steps = EDGE_PROBE_SAMPLES - 1
+            for (i in 0 until EDGE_PROBE_SAMPLES) {
+                val t = if (steps == 0) 0f else i.toFloat() / steps
                 val fx = x + t * dx
                 val fy = y + t * dy
                 val sx = kotlin.math.floor((fx + 0.5f).toDouble()).toInt()
                 val sy = kotlin.math.floor((fy + 0.5f).toDouble()).toInt()
-                val localMax = localMax7x7(edgeMask, width, height, sx, sy)
+                val localMax = localMaxWindow(edgeMask, width, height, sx, sy)
                 if (localMax > maxValue) {
                     maxValue = localMax
-                    if (maxValue >= threshold) {
-                        return true
-                    }
                 }
             }
-            return maxValue >= threshold
+            return maxValue
         }
         if (abs(dx) == 1 && abs(dy) == 1 && manhattan == 2) {
-            // Диагональный сосед: запрещаем corner-cut, пробуем два ортогональных пути.
-            if (hasStrongEdgeBetween(x, y, nx, y, edgeMask, width, height, threshold)) {
-                return true
-            }
-            if (hasStrongEdgeBetween(x, y, x, ny, edgeMask, width, height, threshold)) {
-                return true
-            }
+            // Диагональный сосед: запрещаем corner-cut, проверяем ортогональные обходы.
+            val orthoA = probeEdgeBetween(x, y, nx, y, edgeMask, width, height)
+            val orthoB = probeEdgeBetween(x, y, x, ny, edgeMask, width, height)
+            return max(orthoA, orthoB)
         }
-        return false
+        return 0f
     }
 }

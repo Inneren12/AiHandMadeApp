@@ -17,6 +17,9 @@ enum class Zone {
 /** Edge barrier threshold for min-run replacement guard (in [0,1]). */
 private const val EDGE_BLOCK_THR: Float = 0.25f
 
+/** Минимум голосов большинства, чтобы перекрасить короткий ран. */
+private const val MIN_VOTES_FOR_MERGE: Int = 2
+
 /** Parameters controlling the topology merge. */
 data class TopologyParams(
     val tileSize: Int = 32,
@@ -50,8 +53,8 @@ data class TopologyMetrics(
 object TopologyOps {
     private val zoneCount = Zone.values().size
 
-    /** Локальный максимум edgeMask в окрестности 5×5 (радиус=2) для консервативной защиты. */
-    private fun localMax5x5(
+    /** Локальный максимум edgeMask в окрестности 7×7 (радиус=3) для консервативной защиты. */
+    private fun localMax7x7(
         edgeMask: FloatArray,
         width: Int,
         height: Int,
@@ -61,8 +64,8 @@ object TopologyOps {
         var maxValue = 0f
         val cx = x.coerceIn(0, width - 1)
         val cy = y.coerceIn(0, height - 1)
-        for (dy in -2..2) {
-            for (dx in -2..2) {
+        for (dy in -3..3) {
+            for (dx in -3..3) {
                 val px = (cx + dx).coerceIn(0, width - 1)
                 val py = (cy + dy).coerceIn(0, height - 1)
                 val value = edgeMask[py * width + px]
@@ -225,7 +228,7 @@ object TopologyOps {
                 val x = idx % width
                 val y = idx / width
                 zoneCounts[zones[idx].coerceIn(0, zoneCount - 1)]++
-                if (!protectedByEdge && localMax5x5(edgeMask, width, height, x, y) >= edgeThreshold) {
+                if (!protectedByEdge && localMax7x7(edgeMask, width, height, x, y) >= edgeThreshold) {
                     protectedByEdge = true
                 }
 
@@ -257,13 +260,13 @@ object TopologyOps {
                                     edgeMask,
                                     width,
                                     height,
-                                    edgeThreshold * 0.9f,
+                                    edgeThreshold * 0.95f,
                                 )
                             ) {
                                 nearEdgeHit = true
                             }
                             // Периметральная защита: если у соседней метки локальный максимум ≥ threshold — блокируем замену.
-                            if (!protectedByEdge && localMax5x5(edgeMask, width, height, nx, ny) >= edgeThreshold) {
+                            if (!protectedByEdge && localMax7x7(edgeMask, width, height, nx, ny) >= edgeThreshold) {
                                 protectedByEdge = true
                                 continue
                             }
@@ -285,10 +288,14 @@ object TopologyOps {
                 continue
             }
 
-            val replacement = boundaryVotes.entries
+            val best = boundaryVotes.entries
                 .maxWithOrNull(compareBy<Map.Entry<Int, Int>>({ it.value }, { -it.key }))
-                ?.key ?: label
 
+            if (best == null || best.value < MIN_VOTES_FOR_MERGE) {
+                continue
+            }
+
+            val replacement = best.key
             if (replacement == label) {
                 continue
             }
@@ -376,15 +383,17 @@ object TopologyOps {
         val dy = ny - y
         val manhattan = abs(dx) + abs(dy)
         if (manhattan == 0) {
-            return localMax5x5(edgeMask, width, height, x, y) >= threshold
+            return localMax7x7(edgeMask, width, height, x, y) >= threshold
         }
         if (manhattan == 1) {
-            val samples = floatArrayOf(0f, 0.25f, 0.5f, 0.75f, 1f)
+            val samples = floatArrayOf(0f, 0.125f, 0.25f, 0.375f, 0.5f, 0.625f, 0.75f, 0.875f, 1f)
             var maxValue = 0f
             for (t in samples) {
-                val sx = (x + t * dx).toInt()
-                val sy = (y + t * dy).toInt()
-                val localMax = localMax5x5(edgeMask, width, height, sx, sy)
+                val fx = x + t * dx
+                val fy = y + t * dy
+                val sx = kotlin.math.floor((fx + 0.5f).toDouble()).toInt()
+                val sy = kotlin.math.floor((fy + 0.5f).toDouble()).toInt()
+                val localMax = localMax7x7(edgeMask, width, height, sx, sy)
                 if (localMax > maxValue) {
                     maxValue = localMax
                     if (maxValue >= threshold) {

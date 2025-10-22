@@ -94,7 +94,7 @@ internal class RoleSpreadMorphology(private val config: MorphologyConfig) {
             return Result(mask, false)
         }
 
-        val margin = 1
+        val margin = 0
         val bx0 = (minX - margin).coerceAtLeast(0)
         val bx1 = (maxX + margin).coerceAtMost(width - 1)
         val by0 = (minY - margin).coerceAtLeast(0)

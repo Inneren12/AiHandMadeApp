@@ -213,6 +213,7 @@ object TopologyOps {
 
             var size = 0
             var protectedByEdge = false
+            var nearEdgeHit = false
             boundaryVotes.clear()
             val zoneCounts = IntArray(zoneCount)
 
@@ -246,6 +247,19 @@ object TopologyOps {
                                 protectedByEdge = true
                                 continue
                             }
+                            if (!nearEdgeHit && hasStrongEdgeBetween(
+                                    x,
+                                    y,
+                                    nx,
+                                    ny,
+                                    edgeMask,
+                                    width,
+                                    height,
+                                    params.edgeBlockThreshold * 0.9f,
+                                )
+                            ) {
+                                nearEdgeHit = true
+                            }
                             if (nLabel >= 0) {
                                 boundaryVotes[nLabel] = (boundaryVotes[nLabel] ?: 0) + 1
                             }
@@ -260,7 +274,7 @@ object TopologyOps {
                 continue
             }
 
-            if (protectedByEdge || boundaryVotes.isEmpty()) {
+            if (protectedByEdge || nearEdgeHit || boundaryVotes.isEmpty()) {
                 continue
             }
 

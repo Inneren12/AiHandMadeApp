@@ -260,6 +260,11 @@ object TopologyOps {
                             ) {
                                 nearEdgeHit = true
                             }
+                            // Периметральная защита: если у соседней метки локальный максимум ≥ threshold — блокируем замену.
+                            if (!protectedByEdge && localMax5x5(edgeMask, width, height, nx, ny) >= params.edgeBlockThreshold) {
+                                protectedByEdge = true
+                                continue
+                            }
                             if (nLabel >= 0) {
                                 boundaryVotes[nLabel] = (boundaryVotes[nLabel] ?: 0) + 1
                             }

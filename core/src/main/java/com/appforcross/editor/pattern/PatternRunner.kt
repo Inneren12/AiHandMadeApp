@@ -25,7 +25,7 @@ class PatternRunner(
                 "topology.tile" to params.tileSize,
                 "topology.halo" to params.halo,
                 "topology.edge_block" to params.edgeBlockThreshold,
-                "topology.edge_thr" to params.edgeBlockThreshold,
+                "topology.edge_thr" to params.edgeBlockThreshold, // EDGE_BLOCK_THR default
                 "topology.minrun.outline" to params.threshold(Zone.OUTLINE.ordinal),
                 "topology.minrun.text" to params.threshold(Zone.TEXT.ordinal),
                 "topology.minrun.skin" to params.threshold(Zone.SKIN.ordinal),

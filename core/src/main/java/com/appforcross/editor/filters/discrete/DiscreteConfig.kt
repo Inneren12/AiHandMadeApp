@@ -14,6 +14,8 @@ data class DiscreteConfig(
     val binarization: BinarizationConfig = BinarizationConfig(),
     val moire: MoireConfig = MoireConfig(),
     val morphology: MorphologyConfig = MorphologyConfig(),
+    /** Optional ROI restricting processing to the specified rectangle. */
+    val roi: Roi? = null,
 )
 
 /** Parameters for Sauvola/Wolf adaptive thresholding. */

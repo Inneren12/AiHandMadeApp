@@ -14,7 +14,7 @@ internal class MoireSuppressor(private val config: MoireConfig) {
 
     data class Decision(val mode: Mode, val frequency: Int, val score: Float)
 
-    fun apply(image: LinearImageF16, scratch: FloatArray, scratch2: FloatArray): LinearImageF16 {
+    fun apply(image: LinearImageF16, scratch: FloatArray, scratch2: FloatArray, roi: Roi? = null): LinearImageF16 {
         Logger.i(
             TAG,
             "params",
@@ -37,6 +37,7 @@ internal class MoireSuppressor(private val config: MoireConfig) {
 
         val width = image.width
         val height = image.height
+        roi?.requireWithin(width, height)
         val planeSize = width * height
         val planeFloats = scratch
         if (planeFloats.size < planeSize) {
@@ -74,8 +75,17 @@ internal class MoireSuppressor(private val config: MoireConfig) {
         }
 
         val outData = image.data.copyOf()
-        for (i in 0 until planeSize) {
-            outData[i] = HalfFloats.fromFloat(processed[i])
+        if (roi == null) {
+            for (i in 0 until planeSize) {
+                outData[i] = HalfFloats.fromFloat(processed[i])
+            }
+        } else {
+            for (y in roi.top until roi.bottom) {
+                for (x in roi.left until roi.right) {
+                    val idx = y * width + x
+                    outData[idx] = HalfFloats.fromFloat(processed[idx])
+                }
+            }
         }
 
         Logger.i(

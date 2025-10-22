@@ -30,7 +30,29 @@ internal class RoleSpreadMorphology(private val config: MorphologyConfig) {
         val height = mask.height
         val total = width * height
         val data = mask.data
-        val ones = data.count { it.toInt() != 0 }
+        var ones = 0
+        var minX = width
+        var maxX = -1
+        var minY = height
+        var maxY = -1
+        var rowIndex = 0
+        var yScan = 0
+        while (yScan < height) {
+            var xScan = 0
+            while (xScan < width) {
+                if (data[rowIndex + xScan].toInt() != 0) {
+                    ones++
+                    if (xScan < minX) minX = xScan
+                    if (xScan > maxX) maxX = xScan
+                    if (yScan < minY) minY = yScan
+                    if (yScan > maxY) maxY = yScan
+                }
+                xScan++
+            }
+            rowIndex += width
+            yScan++
+        }
+
         val ratio = ones.toFloat() / maxOf(1, total)
         val transitions = countTransitions(data, width, height)
         val transitionDensity = transitions.toFloat() / maxOf(1, total)
@@ -70,26 +92,6 @@ internal class RoleSpreadMorphology(private val config: MorphologyConfig) {
                 ),
             )
             return Result(mask, false)
-        }
-
-        var minX = width
-        var maxX = -1
-        var minY = height
-        var maxY = -1
-        var yScan = 0
-        while (yScan < height) {
-            var xScan = 0
-            val row = yScan * width
-            while (xScan < width) {
-                if (data[row + xScan].toInt() != 0) {
-                    if (xScan < minX) minX = xScan
-                    if (xScan > maxX) maxX = xScan
-                    if (yScan < minY) minY = yScan
-                    if (yScan > maxY) maxY = yScan
-                }
-                xScan++
-            }
-            yScan++
         }
 
         val margin = 1
@@ -161,6 +163,8 @@ internal class RoleSpreadMorphology(private val config: MorphologyConfig) {
         }
         val result = U8Mask(width, height, resultData)
 
+        val memMB = (total * 2L) / 1_048_576.0
+
         Logger.i(
             TAG,
             "done",
@@ -170,7 +174,7 @@ internal class RoleSpreadMorphology(private val config: MorphologyConfig) {
                 "ratio" to "%.3f".format(ratio),
                 "transitions" to "%.3f".format(transitionDensity),
                 "ms" to elapsedMs(start),
-                "memMB" to (total * 2) / 1_048_576,
+                "memMB" to "%.3f".format(memMB),
                 "bbox.x0" to bx0,
                 "bbox.y0" to by0,
                 "bbox.x1" to bx1,

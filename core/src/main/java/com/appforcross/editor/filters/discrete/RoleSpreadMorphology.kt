@@ -52,6 +52,52 @@ internal class RoleSpreadMorphology(private val config: MorphologyConfig) {
             return Result(mask, false)
         }
 
+        if (ones == 0) {
+            Logger.i(
+                TAG,
+                "done",
+                mapOf(
+                    "stage" to "morphology",
+                    "roi" to false,
+                    "ratio" to "%.3f".format(ratio),
+                    "transitions" to "%.3f".format(transitionDensity),
+                    "ms" to elapsedMs(start),
+                    "memMB" to 0,
+                    "bbox.x0" to -1,
+                    "bbox.y0" to -1,
+                    "bbox.x1" to -1,
+                    "bbox.y1" to -1,
+                ),
+            )
+            return Result(mask, false)
+        }
+
+        var minX = width
+        var maxX = -1
+        var minY = height
+        var maxY = -1
+        var yScan = 0
+        while (yScan < height) {
+            var xScan = 0
+            val row = yScan * width
+            while (xScan < width) {
+                if (data[row + xScan].toInt() != 0) {
+                    if (xScan < minX) minX = xScan
+                    if (xScan > maxX) maxX = xScan
+                    if (yScan < minY) minY = yScan
+                    if (yScan > maxY) maxY = yScan
+                }
+                xScan++
+            }
+            yScan++
+        }
+
+        val margin = 1
+        val bx0 = (minX - margin).coerceAtLeast(0)
+        val bx1 = (maxX + margin).coerceAtMost(width - 1)
+        val by0 = (minY - margin).coerceAtLeast(0)
+        val by1 = (maxY + margin).coerceAtMost(height - 1)
+
         val bufA = scratch
         val bufB = scratch2
         if (bufA.size < total || bufB.size < total) {
@@ -101,8 +147,17 @@ internal class RoleSpreadMorphology(private val config: MorphologyConfig) {
         }
 
         val resultData = ByteArray(total)
-        for (i in 0 until total) {
-            resultData[i] = if (bufA[i].toInt() != 0) 1 else 0
+        var y = 0
+        while (y < height) {
+            val row = y * width
+            val withinY = y in by0..by1
+            var x = 0
+            while (x < width) {
+                val within = withinY && x in bx0..bx1
+                resultData[row + x] = if (within && bufA[row + x].toInt() != 0) 1 else 0
+                x++
+            }
+            y++
         }
         val result = U8Mask(width, height, resultData)
 
@@ -116,6 +171,10 @@ internal class RoleSpreadMorphology(private val config: MorphologyConfig) {
                 "transitions" to "%.3f".format(transitionDensity),
                 "ms" to elapsedMs(start),
                 "memMB" to (total * 2) / 1_048_576,
+                "bbox.x0" to bx0,
+                "bbox.y0" to by0,
+                "bbox.x1" to bx1,
+                "bbox.y1" to by1,
             ),
         )
         return Result(result, true)

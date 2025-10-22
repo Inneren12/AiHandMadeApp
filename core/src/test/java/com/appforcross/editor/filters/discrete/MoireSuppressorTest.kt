@@ -26,8 +26,9 @@ class MoireSuppressorTest {
         )
         val scratch = FloatArray(width * height)
         val scratch2 = FloatArray(width * height)
+        val scratch3 = FloatArray(width * height)
 
-        val processed = suppressor.apply(image, scratch, scratch2)
+        val processed = suppressor.apply(image, scratch, scratch2, scratch3)
 
         val originalVariance = variance(image.data, width * height)
         val processedVariance = variance(processed.data, width * height)

@@ -31,8 +31,23 @@ class DiscretePipeline(private val config: DiscreteConfig = DiscreteConfig()) {
                 "fn" to "DiscretePipeline",
                 "disc.enabled" to config.enabled,
                 "disc.bin.enabled" to config.binarization.enabled,
+                "disc.bin.algorithm" to config.binarization.algorithm.name.lowercase(),
+                "disc.bin.window" to config.binarization.wBin,
+                "disc.bin.k" to "%.3f".format(config.binarization.k),
+                "disc.bin.smooth" to config.binarization.smoothing.name.lowercase(),
                 "disc.moire.enabled" to config.moire.enabled,
+                "disc.moire.mode" to config.moire.mode.name.lowercase(),
+                "disc.moire.maxLag" to config.moire.maxLag,
+                "disc.moire.threshold" to "%.3f".format(config.moire.detectionThreshold),
+                "disc.moire.notch.width" to config.moire.notchWidth,
+                "disc.moire.downscale.factor" to "%.2f".format(config.moire.downscaleFactor),
+                "disc.moire.median" to config.moire.medianSize,
                 "disc.morph.enabled" to config.morphology.enabled,
+                "disc.morph.closing" to config.morphology.closing,
+                "disc.morph.sel_kernel" to config.morphology.selectiveKernel.name.lowercase(),
+                "disc.morph.majority" to config.morphology.majority,
+                "disc.connectivity" to 4,
+                "disc.deterministic" to true,
             ),
         )
         if (!config.enabled) {
@@ -42,10 +57,10 @@ class DiscretePipeline(private val config: DiscreteConfig = DiscreteConfig()) {
             return Output(input, mask, false)
         }
 
-        ensureCapacity(input.width, input.height, input.planes)
+        ensureCapacity(input.width, input.height)
 
-        val moireImage = moire.apply(input, floatScratch, floatScratch2)
-        val mask = binarizer.apply(moireImage, floatScratch, floatScratch3, byteScratch)
+        val moireImage = moire.apply(input, floatScratch, floatScratch2, floatScratch3)
+        val mask = binarizer.apply(moireImage, floatScratch, byteScratch)
         val morph = morphology.apply(mask, byteScratch, byteScratch2)
 
         Logger.i(
@@ -61,13 +76,11 @@ class DiscretePipeline(private val config: DiscreteConfig = DiscreteConfig()) {
         return Output(moireImage, morph.mask, morph.roiAccepted)
     }
 
-    private fun ensureCapacity(width: Int, height: Int, planes: Int) {
+    private fun ensureCapacity(width: Int, height: Int) {
         val pixels = width * height
         if (floatScratch.size < pixels) floatScratch = FloatArray(pixels)
         if (floatScratch2.size < pixels) floatScratch2 = FloatArray(pixels)
-        val radius = maxOf(1, config.binarization.wBin / 2)
-        val padded = (width + radius * 2) * (height + radius * 2)
-        if (floatScratch3.size < padded) floatScratch3 = FloatArray(padded)
+        if (floatScratch3.size < pixels) floatScratch3 = FloatArray(pixels)
         if (byteScratch.size < pixels) byteScratch = ByteArray(pixels)
         if (byteScratch2.size < pixels) byteScratch2 = ByteArray(pixels)
     }

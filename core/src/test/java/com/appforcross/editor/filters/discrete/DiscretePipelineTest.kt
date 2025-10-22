@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
+import com.appforcross.editor.filters.discrete.Smoothing
 import com.appforcross.editor.types.HalfFloats
 import com.appforcross.editor.types.LinearImageF16
 
@@ -38,7 +39,7 @@ class DiscretePipelineTest {
         val image = LinearImageF16(width, height, 1, data)
         val config = DiscreteConfig(
             enabled = true,
-            binarization = BinarizationConfig(wBin = 3, k = 0.25f, smoothing = false),
+            binarization = BinarizationConfig(wBin = 3, k = 0.25f, smoothing = Smoothing.NONE),
             moire = MoireConfig(enabled = false, mode = MoireSuppressor.Mode.OFF),
             morphology = MorphologyConfig(
                 enabled = true,

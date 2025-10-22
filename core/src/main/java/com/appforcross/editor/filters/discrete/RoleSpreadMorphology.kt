@@ -16,7 +16,7 @@ internal class RoleSpreadMorphology(private val config: MorphologyConfig) {
                 "disc.enabled" to config.enabled,
                 "disc.morph.enabled" to config.enabled,
                 "disc.morph.closing" to config.closing,
-                "disc.morph.selective" to config.selectiveDilation,
+                "disc.morph.sel_kernel" to config.selectiveKernel.name.lowercase(),
                 "disc.morph.majority" to config.majority,
             ),
         )
@@ -66,20 +66,31 @@ internal class RoleSpreadMorphology(private val config: MorphologyConfig) {
             erode3x3(bufB, bufA, width, height)
         }
 
-        if (config.selectiveDilation) {
-            val orientation = detectOrientation(bufA, width, height)
-            when (orientation) {
-                Orientation.HORIZONTAL -> {
-                    dilateHorizontal(bufA, bufB, width, height)
-                    copy(bufB, bufA, total)
-                }
-                Orientation.VERTICAL -> {
-                    dilateVertical(bufA, bufB, width, height)
-                    copy(bufB, bufA, total)
-                }
-                Orientation.MIXED -> {
-                    dilateHorizontal(bufA, bufB, width, height)
-                    dilateVertical(bufB, bufA, width, height)
+        when (config.selectiveKernel) {
+            SelectiveKernel.OFF -> Unit
+            SelectiveKernel.HORIZONTAL -> {
+                dilateHorizontal(bufA, bufB, width, height)
+                copy(bufB, bufA, total)
+            }
+            SelectiveKernel.VERTICAL -> {
+                dilateVertical(bufA, bufB, width, height)
+                copy(bufB, bufA, total)
+            }
+            SelectiveKernel.ADAPTIVE -> {
+                val orientation = detectOrientation(bufA, width, height)
+                when (orientation) {
+                    Orientation.HORIZONTAL -> {
+                        dilateHorizontal(bufA, bufB, width, height)
+                        copy(bufB, bufA, total)
+                    }
+                    Orientation.VERTICAL -> {
+                        dilateVertical(bufA, bufB, width, height)
+                        copy(bufB, bufA, total)
+                    }
+                    Orientation.MIXED -> {
+                        dilateHorizontal(bufA, bufB, width, height)
+                        dilateVertical(bufB, bufA, width, height)
+                    }
                 }
             }
         }
@@ -167,7 +178,7 @@ internal class RoleSpreadMorphology(private val config: MorphologyConfig) {
         for (y in 0 until height) {
             for (x in 0 until width) {
                 var maxVal = 0
-                for (dx in -2..2) {
+                for (dx in -1..1) {
                     val xx = (x + dx).coerceIn(0, width - 1)
                     maxVal = maxOf(maxVal, src[y * width + xx].toInt())
                 }
@@ -180,7 +191,7 @@ internal class RoleSpreadMorphology(private val config: MorphologyConfig) {
         for (y in 0 until height) {
             for (x in 0 until width) {
                 var maxVal = 0
-                for (dy in -2..2) {
+                for (dy in -1..1) {
                     val yy = (y + dy).coerceIn(0, height - 1)
                     maxVal = maxOf(maxVal, src[yy * width + x].toInt())
                 }

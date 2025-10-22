@@ -269,8 +269,10 @@ object TopologyOps {
         val perimeterValues = FloatArray(total)
         val probeValues = FloatArray(total)
         val barrierFlags = BooleanArray(total)
-        val boundaryLabels = IntArray(total)
-        val boundaryVotes = HashMap<Int, Int>(8)
+        val boundaryLabelsWorking = IntArray(total)
+        val boundaryLabelsOriginal = IntArray(total)
+        val boundaryVotesWorking = HashMap<Int, Int>(8)
+        val boundaryVotesOriginal = HashMap<Int, Int>(8)
 
         fun selectThreshold(zoneId: Int): Int {
             return params.threshold(zoneId)
@@ -352,10 +354,14 @@ object TopologyOps {
                                 height
                             )
                             barrierFlags[boundaryIndex] = noCrossMask[idx] || noCrossMask[nIdx]
-                            // Для голосования используем текущие (working) метки,
-                            // чтобы Potts-сглаживание помогало решать конфетти-кейсы.
-                            val neighborLabel = labels[nIdx]
-                            boundaryLabels[boundaryIndex] = if (neighborLabel >= 0) neighborLabel else -1
+                            // Сохраняем рабочую и оригинальную метку соседа для последующего голосования
+                            // (working влияет на решение, original — на детект ничьих pre-Potts).
+                            val neighborLabelWorking = labels[nIdx]
+                            val neighborLabelOriginal = originalLabels[nIdx]
+                            boundaryLabelsWorking[boundaryIndex] =
+                                if (neighborLabelWorking >= 0) neighborLabelWorking else -1
+                            boundaryLabelsOriginal[boundaryIndex] =
+                                if (neighborLabelOriginal >= 0) neighborLabelOriginal else -1
                             perimeterCount++
                         }
                     }
@@ -384,10 +390,12 @@ object TopologyOps {
             var perimeterStrong = false
             var probeStrong = false
             var nearHit = false
-            boundaryVotes.clear()
+            boundaryVotesWorking.clear()
+            boundaryVotesOriginal.clear()
 
             for (i in 0 until perimeterCount) {
-                val neighborLabel = boundaryLabels[i]
+                val neighborWorking = boundaryLabelsWorking[i]
+                val neighborOriginal = boundaryLabelsOriginal[i]
                 val edgeValue = perimeterValues[i]
                 val probeValue = probeValues[i]
                 val blocked = barrierFlags[i]
@@ -411,8 +419,13 @@ object TopologyOps {
                     nearHit = true
                     continue
                 }
-                if (neighborLabel >= 0) {
-                    boundaryVotes[neighborLabel] = (boundaryVotes[neighborLabel] ?: 0) + 1
+                if (neighborWorking >= 0) {
+                    boundaryVotesWorking[neighborWorking] =
+                        (boundaryVotesWorking[neighborWorking] ?: 0) + 1
+                }
+                if (neighborOriginal >= 0) {
+                    boundaryVotesOriginal[neighborOriginal] =
+                        (boundaryVotesOriginal[neighborOriginal] ?: 0) + 1
                 }
             }
 
@@ -431,36 +444,42 @@ object TopologyOps {
                 restoreComponent(size, componentLabel)
                 continue
             }
-            if (boundaryVotes.isEmpty()) {
+            if (boundaryVotesWorking.isEmpty()) {
                 cancelledByVotes++
                 restoreComponent(size, componentLabel)
                 continue
             }
 
-            val maxVotes = boundaryVotes.values.maxOrNull() ?: 0
-            val originalVotes = boundaryVotes[componentLabel] ?: 0
-            if (maxVotes > peakWinnerVotes) {
-                peakWinnerVotes = maxVotes
+            val maxWorking = boundaryVotesWorking.values.maxOrNull() ?: 0
+            val maxOriginal = boundaryVotesOriginal.values.maxOrNull() ?: 0
+            val originalVotes = boundaryVotesOriginal[componentLabel] ?: 0
+            if (maxWorking > peakWinnerVotes) {
+                peakWinnerVotes = maxWorking
             }
             if (originalVotes > peakOriginalVotes) {
                 peakOriginalVotes = originalVotes
             }
-            if (maxVotes < MIN_VOTES_FOR_MERGE) {
+            if (maxWorking < MIN_VOTES_FOR_MERGE) {
                 cancelledByVotes++
                 restoreComponent(size, componentLabel)
                 continue
             }
-            val contenders = boundaryVotes.filterValues { it == maxVotes }
-            if (contenders.size != 1) {
+            val workingWinners = boundaryVotesWorking.filterValues { it == maxWorking }.keys
+            val originalWinners = boundaryVotesOriginal.filterValues { it == maxOriginal }.keys
+            val tieWorking = workingWinners.size != 1
+            val tieOriginal = (maxOriginal >= 1) && (originalWinners.size > 1)
+            if (tieWorking || tieOriginal) {
                 cancelledByTie++
                 restoreComponent(size, componentLabel)
                 continue
             }
 
-            val replacement = contenders.keys.first()
+            val replacement = workingWinners.first()
             lastWinnerLabel = replacement
-            // Если победитель совпадает с исходной меткой компоненты — это no-op.
+            // Если победитель совпадает с исходной меткой компоненты — восстанавливаем исходное состояние
+            // и не считаем это отменой.
             if (replacement == componentLabel) {
+                restoreComponent(size, componentLabel)
                 continue
             }
             var changed = false

@@ -51,7 +51,7 @@ object TopologyOps {
     private val zoneCount = Zone.values().size
 
     /** Локальный максимум edgeMask в окрестности 5×5 (радиус=2) для консервативной защиты. */
-    private fun edgeLocalMax5x5(
+    private fun localMax5x5(
         edgeMask: FloatArray,
         width: Int,
         height: Int,
@@ -224,7 +224,7 @@ object TopologyOps {
                 val x = idx % width
                 val y = idx / width
                 zoneCounts[zones[idx].coerceIn(0, zoneCount - 1)]++
-                if (!protectedByEdge && edgeLocalMax5x5(edgeMask, width, height, x, y) >= params.edgeBlockThreshold) {
+                if (!protectedByEdge && localMax5x5(edgeMask, width, height, x, y) >= params.edgeBlockThreshold) {
                     protectedByEdge = true
                 }
 
@@ -372,7 +372,7 @@ object TopologyOps {
         for (t in samples) {
             val sx = (x + t * (nx - x)).toInt()
             val sy = (y + t * (ny - y)).toInt()
-            val localMax = edgeLocalMax5x5(edgeMask, width, height, sx, sy)
+            val localMax = localMax5x5(edgeMask, width, height, sx, sy)
             if (localMax > maxValue) {
                 maxValue = localMax
                 if (maxValue >= threshold) {

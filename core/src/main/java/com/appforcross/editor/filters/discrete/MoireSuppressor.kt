@@ -8,7 +8,7 @@ import com.appforcross.editor.logging.Logger
 import com.appforcross.editor.types.HalfFloats
 import com.appforcross.editor.types.LinearImageF16
 
-enum class Mode { AUTO, NOTCH, DOWNSCALE, MEDIAN, OFF }
+public enum class Mode { AUTO, NOTCH, DOWNSCALE, MEDIAN, OFF }
 
 internal class MoireSuppressor(private val config: MoireConfig) {
 

@@ -23,6 +23,18 @@ class DiscretePipeline(private val config: DiscreteConfig = DiscreteConfig()) {
     private var byteScratch2 = ByteArray(0)
 
     fun run(input: LinearImageF16, roi: Roi? = config.roi): Output {
+        return run(input, DiscreteParams(), roi)
+    }
+
+    fun run(input: LinearImageF16, params: DiscreteParams): Output {
+        return run(input, params, null)
+    }
+
+    fun run(
+        input: LinearImageF16,
+        params: DiscreteParams,
+        roiOverride: Roi?,
+    ): Output {
         val start = System.nanoTime()
         Logger.i(
             TAG,
@@ -42,13 +54,15 @@ class DiscretePipeline(private val config: DiscreteConfig = DiscreteConfig()) {
             return Output(input, mask, false)
         }
 
-        roi?.requireWithin(input.width, input.height)
+        val effectiveRoi = roiOverride ?: params.roi ?: config.roi
+
+        effectiveRoi?.requireWithin(input.width, input.height)
 
         ensureCapacity(input.width, input.height, input.planes)
 
-        val moireImage = moire.apply(input, floatScratch, floatScratch2, roi)
-        val mask = binarizer.apply(moireImage, floatScratch, floatScratch3, byteScratch, roi)
-        val morph = morphology.apply(mask, byteScratch, byteScratch2, roi)
+        val moireImage = moire.apply(input, floatScratch, floatScratch2, effectiveRoi)
+        val mask = binarizer.apply(moireImage, floatScratch, floatScratch3, byteScratch, effectiveRoi)
+        val morph = morphology.apply(mask, byteScratch, byteScratch2, effectiveRoi)
 
         Logger.i(
             TAG,

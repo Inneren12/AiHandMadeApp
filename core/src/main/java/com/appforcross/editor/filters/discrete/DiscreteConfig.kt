@@ -54,3 +54,14 @@ data class MorphologyConfig(
     /** Transition density threshold required to treat the ROI as text. */
     val roiTransitionDensity: Float = 0.12f,
 )
+
+/**
+ * Runtime parameters supplied to [DiscretePipeline.run] calls.
+ *
+ * These allow the caller to override request-scoped attributes such as ROI
+ * without mutating the shared [DiscreteConfig] instance.
+ */
+data class DiscreteParams(
+    /** Optional ROI restricting processing for a single invocation. */
+    val roi: Roi? = null,
+)

@@ -167,28 +167,31 @@ internal class MoireSuppressor(private val config: MoireConfig) {
     }
 
     private fun notchFilter(src: FloatArray, dst: FloatArray, width: Int, height: Int, lag: Int) {
+        val strength = 0.6f
         for (y in 0 until height) {
             for (x in 0 until width) {
                 val idx = y * width + x
-                var acc = src[idx]
-                var count = 1
+                var neighborSum = 0f
+                var neighborCount = 0
                 if (x - lag >= 0) {
-                    acc += src[idx - lag]
-                    count++
+                    neighborSum += src[idx - lag]
+                    neighborCount++
                 }
                 if (x + lag < width) {
-                    acc += src[idx + lag]
-                    count++
+                    neighborSum += src[idx + lag]
+                    neighborCount++
                 }
                 if (y - lag >= 0) {
-                    acc += src[idx - lag * width]
-                    count++
+                    neighborSum += src[idx - lag * width]
+                    neighborCount++
                 }
                 if (y + lag < height) {
-                    acc += src[idx + lag * width]
-                    count++
+                    neighborSum += src[idx + lag * width]
+                    neighborCount++
                 }
-                dst[idx] = src[idx] - (acc - src[idx]) / max(1, count - 1)
+                val neighborMean = if (neighborCount > 0) neighborSum / neighborCount else src[idx]
+                val delta = src[idx] - neighborMean
+                dst[idx] = src[idx] - strength * delta
             }
         }
     }

@@ -3,7 +3,9 @@ package com.appforcross.editor.filters.discrete
 import com.appforcross.editor.logging.Logger
 import com.appforcross.editor.types.U8Mask
 
-internal class RoleSpreadMorphology(private val config: MorphologyConfig) {
+class RoleSpreadMorphology(private val config: MorphologyConfig) {
+
+    public enum class Mode { AUTO, NOTCH, DOWNSCALE, MEDIAN, OFF }
 
     data class Result(val mask: U8Mask, val roiAccepted: Boolean)
 

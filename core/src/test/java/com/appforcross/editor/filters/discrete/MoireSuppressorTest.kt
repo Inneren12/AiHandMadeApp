@@ -22,7 +22,7 @@ class MoireSuppressorTest {
         }
         val image = LinearImageF16(width, height, 1, data)
         val suppressor = MoireSuppressor(
-            MoireConfig(enabled = true, mode = MoireSuppressor.Mode.NOTCH, maxLag = 4, detectionThreshold = 0.3f),
+            MoireConfig(enabled = true, mode = Mode.NOTCH, maxLag = 4, detectionThreshold = 0.3f),
         )
         val scratch = FloatArray(width * height)
         val scratch2 = FloatArray(width * height)

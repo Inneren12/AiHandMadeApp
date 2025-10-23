@@ -1,6 +1,6 @@
 package com.appforcross.editor.filters.discrete
 
-import com.appforcross.editor.filters.discrete.MoireSuppressor.Mode
+import com.appforcross.editor.filters.discrete.Mode
 
 /**
  * Configuration block for the discrete document filter pipeline.
